@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Budget Mobile</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#111827" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Budget" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1 id="appTitle">Overview</h1>
+      <button id="installBtn" class="install-btn hidden">Install</button>
+    </header>
+
+    <main id="content" class="content">
+      <section id="tab-overview" class="tab active">
+        <div class="cards">
+          <div class="card"><div class="card-title">Income</div><div class="card-value" id="ov-income">$0</div><div class="card-sub">This month</div></div>
+          <div class="card"><div class="card-title">Expenses</div><div class="card-value" id="ov-expenses">$0</div><div class="card-sub">This month</div></div>
+          <div class="card"><div class="card-title">Net</div><div class="card-value" id="ov-net">$0</div><div class="card-sub">This month</div></div>
+          <div class="card"><div class="card-title">Budget Used</div><div class="card-value" id="ov-budget">0%</div><div class="card-sub">Of total budget</div></div>
+        </div>
+        <div class="panel"><div class="panel-header"><div class="panel-title">Daily Expenses (7d)</div></div><div id="barChart" class="chart"></div></div>
+        <div class="panel"><div class="panel-header"><div class="panel-title">30-Day Running Balance</div></div><div id="lineChart" class="chart"></div></div>
+      </section>
+
+      <section id="tab-budgets" class="tab">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Monthly Budget Overview</div><button id="addBudgetBtn" class="btn">Add Budget</button></div>
+          <div class="progress-wrap">
+            <div class="progress-bar"><div id="budgetProgress" class="progress-value" style="width:0%"></div></div>
+            <div class="progress-meta"><span id="budgetUsedPct">0% used</span><span id="budgetRemaining">$0 remaining</span></div>
+          </div>
+        </div>
+        <div id="budgetList" class="list"></div>
+      </section>
+
+      <section id="tab-transactions" class="tab">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Transactions</div><button id="addTxnBtn" class="btn">Add</button></div>
+          <div class="filters">
+            <input id="search" class="input" placeholder="Search description..." />
+            <select id="filterCategory" class="input"><option value="all">All categories</option></select>
+            <select id="sortBy" class="input"><option value="date">Date</option><option value="amount">Amount</option></select>
+          </div>
+          <div id="txnList" class="list"></div>
+          <div id="emptyTxn" class="empty hidden">No transactions match.</div>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab">
+        <div class="panel">
+          <div class="panel-title">Appearance</div>
+          <div class="settings-row"><label>Theme</label><select id="themeSelect" class="input"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+          <div class="settings-row"><label>Currency</label><select id="currencySelect" class="input"><option value="USD">US Dollar ($)</option><option value="EUR">Euro (€)</option><option value="GBP">British Pound (£)</option><option value="CAD">Canadian Dollar (C$)</option><option value="AUD">Australian Dollar (A$)</option></select></div>
+          <div class="settings-row"><label>Compact mode</label><input id="compactToggle" type="checkbox" /></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Data</div>
+          <div class="settings-row"><button id="exportBtn" class="btn">Export Data</button><button id="importBtn" class="btn">Import Data</button><input id="importFile" type="file" accept="application/json" class="hidden" /></div>
+          <div class="settings-row"><button id="clearBtn" class="btn danger">Clear All Data</button></div>
+          <div class="muted">Data is stored locally in your browser for offline use.</div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tabbtn active" data-tab="overview">Overview</button>
+      <button class="tabbtn" data-tab="budgets">Budgets</button>
+      <button class="tabbtn" data-tab="transactions">Transactions</button>
+      <button class="tabbtn" data-tab="settings">Settings</button>
+    </nav>
+
+    <dialog id="txnDialog" class="dialog">
+      <form method="dialog" class="dialog-body" id="txnForm">
+        <h3>Add Transaction</h3>
+        <select id="txnType" class="input"><option value="expense">Expense</option><option value="income">Income</option></select>
+        <input id="txnDesc" class="input" placeholder="Description" required />
+        <input id="txnAmount" class="input" placeholder="Amount" inputmode="decimal" required />
+        <input id="txnCategory" class="input" placeholder="Category (e.g., Food)" />
+        <div class="dialog-actions"><button value="cancel" class="btn ghost">Cancel</button><button id="saveTxn" class="btn">Save</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="budgetDialog" class="dialog">
+      <form method="dialog" class="dialog-body" id="budgetForm">
+        <h3>Add/Update Budget</h3>
+        <input id="budgetCategory" class="input" placeholder="Category (e.g., Food)" required />
+        <input id="budgetAmount" class="input" placeholder="Monthly budget" inputmode="decimal" required />
+        <div class="dialog-actions"><button value="cancel" class="btn ghost">Cancel</button><button id="saveBudget" class="btn">Save</button></div>
+      </form>
+    </dialog>
+
+    <script src="app.js" defer></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+      }
+    </script>
+  </body>
+</html>
