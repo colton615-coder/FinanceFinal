@@ -192,3 +192,9 @@ body.pull-refresh::before {
   content: 'Refreshing…'; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
   background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 999px; z-index: 9999;
 }
+/* ===== PATCH: lock layout, no horizontal scroll ===== */
+html, body, .content, .tab, .panel, .tabbar { overflow-x: hidden; }
+* { -webkit-tap-highlight-color: transparent; }
+
+/* keep charts from causing sideways overflow */
+canvas { max-width: 100%; }
