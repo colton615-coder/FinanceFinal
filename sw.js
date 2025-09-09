@@ -1,4 +1,4 @@
-const CACHE = 'budget-pwa-v1';
+const CACHE = 'budget-pwa-v8';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./assets/icon-192.png','./assets/icon-512.png','./assets/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
