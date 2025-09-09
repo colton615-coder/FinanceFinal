@@ -2,19 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Budget Mobile</title>
 
     <!-- PWA -->
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#111827" />
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Budget" />
-    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 
     <!-- Styles -->
     <link rel="stylesheet" href="styles.css" />
+
+    <!-- Frameworks (defer preserves execution order). 
+         Using Vue (UMD) + Chart.js (UMD) for zero-build setup. -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -23,7 +31,58 @@
     </header>
 
     <main id="content" class="content">
-      <!-- Overview -->
+      <!-- DASHBOARD (new) -->
+      <section id="tab-dashboard" class="tab">
+        <div id="dashboardApp">
+          <!-- KPI cards (Vue populated) -->
+          <div class="cards">
+            <div class="card">
+              <div class="card-title">Income</div>
+              <div class="card-value">{{ kpi.incomeDisplay }}</div>
+              <div class="card-sub">This month</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Expenses</div>
+              <div class="card-value">{{ kpi.expensesDisplay }}</div>
+              <div class="card-sub">This month</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Net</div>
+              <div class="card-value">{{ kpi.netDisplay }}</div>
+              <div class="card-sub">This month</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Budget Used</div>
+              <div class="card-value">{{ kpi.usedPctDisplay }}</div>
+              <div class="card-sub">Of total budget</div>
+            </div>
+          </div>
+
+          <!-- Charts -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">30-Day Running Balance</div>
+            </div>
+            <canvas id="ch-trend"></canvas>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Category Breakdown (This Month)</div>
+            </div>
+            <canvas id="ch-categories"></canvas>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Income vs Expenses (This Month)</div>
+            </div>
+            <canvas id="ch-income-expense"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- OVERVIEW -->
       <section id="tab-overview" class="tab active">
         <div class="cards">
           <div class="card">
@@ -63,7 +122,7 @@
         </div>
       </section>
 
-      <!-- Budgets -->
+      <!-- BUDGETS -->
       <section id="tab-budgets" class="tab">
         <div class="panel">
           <div class="panel-header">
@@ -71,7 +130,9 @@
             <button id="addBudgetBtn" class="btn">Add Budget</button>
           </div>
           <div class="progress-wrap">
-            <div class="progress-bar"><div id="budgetProgress" class="progress-value" style="width:0%"></div></div>
+            <div class="progress-bar">
+              <div id="budgetProgress" class="progress-value" style="width: 0%"></div>
+            </div>
             <div class="progress-meta">
               <span id="budgetUsedPct">0% used</span>
               <span id="budgetRemaining">$0 remaining</span>
@@ -81,7 +142,7 @@
         <div id="budgetList" class="list"></div>
       </section>
 
-      <!-- Transactions -->
+      <!-- TRANSACTIONS -->
       <section id="tab-transactions" class="tab">
         <div class="panel">
           <div class="panel-header">
@@ -103,7 +164,7 @@
         </div>
       </section>
 
-      <!-- Settings -->
+      <!-- SETTINGS -->
       <section id="tab-settings" class="tab">
         <div class="panel">
           <div class="panel-title">Appearance</div>
@@ -144,41 +205,14 @@
           <div class="muted">Data is stored locally in your browser for offline use.</div>
         </div>
       </section>
-
-      <!-- Analytics (new) -->
-      <section id="tab-analytics" class="tab">
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">Analytics Dashboard</div>
-          </div>
-          <div class="charts-grid">
-            <div class="chart-card">
-              <div class="card-title">Income vs Expenses (30 days)</div>
-              <canvas id="anl-incomeExpense" style="height:260px"></canvas>
-            </div>
-            <div class="chart-card">
-              <div class="card-title">Spending by Category (this month)</div>
-              <canvas id="anl-category" style="height:260px"></canvas>
-            </div>
-            <div class="chart-card">
-              <div class="card-title">Daily Expenses (30 days)</div>
-              <canvas id="anl-dailyExpenses" style="height:260px"></canvas>
-            </div>
-            <div class="chart-card">
-              <div class="card-title">Cumulative Net (90 days)</div>
-              <canvas id="anl-cumNet" style="height:260px"></canvas>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
 
     <nav class="tabbar">
+      <button class="tabbtn" data-tab="dashboard">Dashboard</button>
       <button class="tabbtn active" data-tab="overview">Overview</button>
       <button class="tabbtn" data-tab="budgets">Budgets</button>
       <button class="tabbtn" data-tab="transactions">Transactions</button>
       <button class="tabbtn" data-tab="settings">Settings</button>
-      <button class="tabbtn" data-tab="analytics">Analytics</button>
     </nav>
 
     <!-- Dialogs -->
@@ -211,20 +245,14 @@
       </form>
     </dialog>
 
-    <!-- Framework & Charts -->
-    <!-- Alpine.js = lightweight framework for state/helpers (no build step) -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- Chart.js for proper analytics -->
-    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-
-    <!-- App -->
+    <!-- Core app (must load after Vue/Chart.js) -->
     <script src="app.js" defer></script>
 
     <!-- SW registration -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js').catch(()=>{});
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("sw.js").catch(() => {});
         });
       }
     </script>
