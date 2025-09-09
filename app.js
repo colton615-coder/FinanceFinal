@@ -1088,3 +1088,139 @@ function _monthSlice(transactions) {
     });
   };
 })();
+/* =========================
+   PATCH: Hard-block tab swipe nav, allow row swipe
+   - Suppresses our older swipe-nav by ignoring any activateTab() call
+     that follows a horizontal swipe not coming from a tab button.
+   ========================= */
+(function blockSwipeNavHard(){
+  let lastSwipeTs = 0, lastTabClickTs = 0;
+
+  // mark real tab clicks
+  document.addEventListener('click', (e) => {
+    if (e.target?.closest?.('.tabbtn')) lastTabClickTs = Date.now();
+  }, { capture: true });
+
+  // detect any horizontal swipe anywhere
+  let sx = 0, sy = 0;
+  window.addEventListener('touchstart', (e)=>{ const t=e.touches[0]; if(!t) return; sx=t.clientX; sy=t.clientY; }, {passive:true});
+  window.addEventListener('touchend', (e)=>{
+    const t=e.changedTouches[0]; if(!t) return;
+    const dx=t.clientX - sx, dy=t.clientY - sy;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) lastSwipeTs = Date.now();
+  }, {passive:true});
+
+  // wrap activateTab to ignore swipe-triggered calls
+  const _activate = window.activateTab;
+  window.activateTab = function(next){
+    const recentSwipe = Date.now() - lastSwipeTs < 600;
+    const recentTabClick = Date.now() - lastTabClickTs < 600;
+    if (recentSwipe && !recentTabClick) return; // ignore swipe-nav
+    _activate?.(next);
+  };
+})();
+
+/* =========================
+   PATCH: Transactions polish + reliable Edit
+   - One revealed row at a time
+   - Edit always opens dialog with the right record
+   - Add classes to amount for styling
+   ========================= */
+(function txRowPolish(){
+  const prevRender = window.renderTransactions;
+
+  function txById(id){ return (state.transactions || []).find(t => t.id === id); }
+
+  window.renderTransactions = function enhancedRender(){
+    prevRender?.();
+
+    const wrap = document.getElementById('txnList');
+    if (!wrap) return;
+
+    let openRow = window.__openRow || null;
+
+    [...wrap.querySelectorAll('.item')].forEach((node, i) => {
+      // If not already marked, decorate structure (works with our previous override too)
+      if (!node.querySelector('.slide')) {
+        const slide = document.createElement('div');
+        slide.className = 'slide';
+        slide.innerHTML = node.innerHTML;
+        node.innerHTML = '';
+        node.appendChild(slide);
+        node.classList.add('swipeable');
+
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
+        const btnEdit = document.createElement('button'); btnEdit.className='btn edit'; btnEdit.textContent='Edit';
+        const btnDel  = document.createElement('button'); btnDel.className='btn delete'; btnDel.textContent='Delete';
+        actions.appendChild(btnEdit); actions.appendChild(btnDel);
+        node.appendChild(actions);
+      }
+
+      // pair DOM row to data by index from current filtered/sorted list
+      // compute the same filtered/sorted list as app uses
+      const q = (document.getElementById('search')?.value || '').toLowerCase();
+      const cat = (document.getElementById('filterCategory')?.value || 'all');
+      const sort = (document.getElementById('sortBy')?.value || 'date');
+      let list = (state.transactions || []).filter(t => {
+        const s = (t.desc || '').toLowerCase().includes(q);
+        const c = cat === 'all' || (t.category || 'other').toLowerCase() === cat;
+        return s && c;
+      });
+      list.sort((a,b)=> sort==='date' ? new Date(b.dateISO)-new Date(a.dateISO) : Number(b.amount)-Number(a.amount));
+      const tx = list[i]; if (!tx) return;
+      node.dataset.txid = tx.id;
+
+      // amount styling hook
+      const amountEl = node.querySelector('div[style*="text-align:right"]');
+      if (amountEl) { amountEl.classList.add('amount', tx.type === 'income' ? 'income' : 'expense'); }
+
+      const slide = node.querySelector('.slide');
+      const btnEdit = node.querySelector('.btn.edit');
+      const btnDel  = node.querySelector('.btn.delete');
+
+      // swipe-to-reveal (one open at a time)
+      let x0=0, dx=0;
+      node.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; dx = 0; }, {passive:true});
+      node.addEventListener('touchmove',  e => { dx = e.touches[0].clientX - x0; if (dx<0) slide.style.transform = `translateX(${Math.max(-104,dx)}px)`; }, {passive:true});
+      node.addEventListener('touchend',   e => {
+        const shouldOpen = dx < -60;
+        if (openRow && openRow !== node) { openRow.classList.remove('revealed'); openRow.querySelector('.slide').style.transform = 'translateX(0)'; }
+        node.classList.toggle('revealed', shouldOpen);
+        slide.style.transform = shouldOpen ? 'translateX(-104px)' : 'translateX(0)';
+        window.__openRow = openRow = shouldOpen ? node : null;
+      }, {passive:true});
+
+      // close on outside tap
+      document.addEventListener('click', (e)=>{
+        if (!openRow) return;
+        if (!e.target.closest('.item.swipeable')) {
+          openRow.classList.remove('revealed');
+          openRow.querySelector('.slide').style.transform = 'translateX(0)';
+          openRow = window.__openRow = null;
+        }
+      }, {passive:true});
+
+      // Edit flow
+      btnEdit.onclick = () => {
+        const rec = txById(node.dataset.txid); if (!rec) return;
+        const dlg = document.getElementById('txnDialog');
+        document.getElementById('txnType').value = rec.type;
+        document.getElementById('txnDesc').value = rec.desc;
+        document.getElementById('txnAmount').value = String(rec.amount);
+        document.getElementById('txnCategory').value = rec.subcategory ? `${rec.category} > ${rec.subcategory}` : (rec.category || 'Other');
+        window.__editTxnId = rec.id;
+        dlg.classList.add('is-open'); dlg.setAttribute('open','true');
+      };
+
+      // Delete flow
+      btnDel.onclick = () => {
+        const rec = txById(node.dataset.txid); if (!rec) return;
+        if (!confirm('Delete this transaction?')) return;
+        const idx = state.transactions.findIndex(t => t.id === rec.id);
+        if (idx >= 0) state.transactions.splice(idx, 1);
+        saveState(); renderAll();
+      };
+    });
+  };
+})();
