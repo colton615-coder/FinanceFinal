@@ -148,3 +148,47 @@ body.pull-refresh::before {
   color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 999px;
   z-index: 9999;
 }
+/* ===== PATCH: explicit light/dark theme variables ===== */
+.theme-dark {
+  /* keep your current (dark) palette */
+  --bg:#0b0c10; --fg:#e5e7eb; --muted:#9ca3af; --card:#111827; --border:#1f2937;
+  --primary:#2563eb; --success:#16a34a; --danger:#ef4444;
+}
+.theme-light {
+  /* true light palette */
+  --bg:#f8fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --border:#e5e7eb;
+  --primary:#3b82f6; --success:#16a34a; --danger:#ef4444;
+}
+
+/* Light-mode surface overrides for components that were hardcoded dark */
+.theme-light body { background: var(--bg); color: var(--fg); }
+.theme-light .input { background:#ffffff; color:var(--fg); border:1px solid var(--border); }
+.theme-light .card, .theme-light .panel {
+  background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.06));
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+}
+.theme-light .tabbar { border-top:1px solid rgba(0,0,0,0.08); backdrop-filter:saturate(140%) blur(6px); }
+.theme-light .chart { background:#ffffff; border-color: var(--border); }
+
+/* ===== PATCH: swipe actions for transactions ===== */
+.item.swipeable { position: relative; overflow: hidden; }
+.item .slide { transition: transform .2s ease; }
+.item.revealed .slide { transform: translateX(-104px); }
+
+.item-actions {
+  position: absolute; inset: 0 8px 0 auto;
+  display:flex; align-items:center; gap:8px; padding-left:8px; padding-right:4px;
+  opacity:0; pointer-events:none; transition: opacity .2s ease;
+}
+.item.revealed .item-actions { opacity:1; pointer-events:auto; }
+
+.item-actions .btn { padding: 8px 10px; border-radius: 8px; }
+.item-actions .btn.edit { background: linear-gradient(135deg, #22d3ee, #3b82f6); }
+.item-actions .btn.delete { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+
+/* ===== PATCH: subtle pull-to-refresh banner (already supported) ===== */
+body.pull-refresh::before {
+  content: 'Refreshing…'; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 999px; z-index: 9999;
+}
