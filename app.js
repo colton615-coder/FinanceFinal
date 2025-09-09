@@ -966,3 +966,125 @@ function _monthSlice(transactions) {
    PATCH: recurring weekly/monthly via tags (already supported)
    Notes: add [weekly] or [monthly] in Description or long-press Save
    ========================= */
+/* =========================
+   PATCH: Kill tab swipe, keep swipe-to-delete
+   - Blocks our earlier swipe-nav handler using capture-phase guards
+   ========================= */
+(function blockTabSwipe(){
+  let x0=0, y0=0;
+  window.addEventListener('touchstart', e => {
+    const t = e.touches[0]; if(!t) return; x0=t.clientX; y0=t.clientY;
+  }, { passive:true, capture:true });
+  window.addEventListener('touchend', e => {
+    const t = e.changedTouches[0]; if(!t) return;
+    // ignore if inside a swipeable row (we still want swipe-to-delete)
+    if (e.target && e.target.closest && e.target.closest('.item.swipeable')) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    // if this looks like a horizontal swipe, stop the old handler from firing
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+      e.stopImmediatePropagation();
+    }
+  }, { passive:true, capture:true });
+})();
+
+/* =========================
+   PATCH: No-zoom JS fallback (in case meta is cached)
+   ========================= */
+(function disableZoomFallback(){
+  try {
+    document.addEventListener('gesturestart', e => e.preventDefault(), { passive:false });
+    document.addEventListener('dblclick', e => { e.preventDefault(); }, true);
+  } catch {}
+})();
+
+/* =========================
+   PATCH: Make Edit always work (robust mapping list -> DOM)
+   - Rebuilds filtered/sorted list and pairs rows by index
+   ========================= */
+(function fixEditBinding(){
+  const prevRender = window.renderTransactions;
+  function computeList(){
+    const q = (document.getElementById('search')?.value || '').toLowerCase();
+    const cat = (document.getElementById('filterCategory')?.value || 'all');
+    const sort = (document.getElementById('sortBy')?.value || 'date');
+    let list = (state.transactions || []).filter(t => {
+      const matchesSearch = (t.desc || '').toLowerCase().includes(q);
+      const matchesCat = cat === 'all' || (t.category || 'other').toLowerCase() === cat;
+      return matchesSearch && matchesCat;
+    });
+    list.sort((a,b)=>{
+      if (sort === 'date') return new Date(b.dateISO) - new Date(a.dateISO);
+      return Number(b.amount) - Number(a.amount);
+    });
+    return list;
+  }
+
+  window.renderTransactions = function patchedRenderTransactions(){
+    prevRender?.();
+
+    const wrap = document.getElementById('txnList');
+    if (!wrap) return;
+    const rows = [...wrap.querySelectorAll('.item')];
+    const list = computeList();
+
+    rows.forEach((node, i) => {
+      // wipe previous enhancement to avoid stale handlers
+      node.replaceWith(node.cloneNode(true));
+    });
+
+    const freshRows = [...document.getElementById('txnList').querySelectorAll('.item')];
+    freshRows.forEach((node, i) => {
+      const tx = list[i]; if (!tx) return;
+
+      // build swipe UI container if not present
+      const slide = document.createElement('div');
+      slide.className = 'slide';
+      slide.innerHTML = node.innerHTML;
+      node.innerHTML = '';
+      node.appendChild(slide);
+      node.classList.add('swipeable');
+      node.dataset.txid = tx.id;
+
+      const actions = document.createElement('div');
+      actions.className = 'item-actions';
+      const btnEdit = document.createElement('button'); btnEdit.className='btn edit'; btnEdit.textContent='Edit';
+      const btnDel  = document.createElement('button'); btnDel.className='btn delete'; btnDel.textContent='Delete';
+      actions.appendChild(btnEdit); actions.appendChild(btnDel);
+      node.appendChild(actions);
+
+      // show category › subcategory if available
+      if (tx.subcategory) {
+        const meta = node.querySelector('.meta');
+        if (meta && !/›/.test(meta.textContent)) {
+          meta.textContent = meta.textContent.replace('•', `• ${tx.category} › ${tx.subcategory} •`);
+        }
+      }
+
+      // swipe-to-reveal (doesn't navigate tabs thanks to blockTabSwipe)
+      let x0=0, dx=0;
+      node.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; dx=0; }, { passive:true });
+      node.addEventListener('touchmove',  e => { dx = e.touches[0].clientX - x0; if (dx<0) slide.style.transform = `translateX(${Math.max(-104,dx)}px)`; }, { passive:true });
+      node.addEventListener('touchend',   e => { const open = dx < -60; node.classList.toggle('revealed', open); slide.style.transform = open ? 'translateX(-104px)' : 'translateX(0)'; }, { passive:true });
+
+      // Edit
+      btnEdit.addEventListener('click', () => {
+        const dlg = document.getElementById('txnDialog');
+        document.getElementById('txnType').value = tx.type;
+        document.getElementById('txnDesc').value = tx.desc;
+        document.getElementById('txnAmount').value = String(tx.amount);
+        document.getElementById('txnCategory').value = tx.subcategory ? `${tx.category} > ${tx.subcategory}` : tx.category;
+        window.__editTxnId = tx.id;
+        // open safely on iOS too
+        dlg.classList.add('is-open'); dlg.setAttribute('open','true');
+      });
+
+      // Delete
+      btnDel.addEventListener('click', () => {
+        if (!confirm('Delete this transaction?')) return;
+        const idx = state.transactions.findIndex(t => t.id === tx.id);
+        if (idx >= 0) state.transactions.splice(idx, 1);
+        saveState(); renderAll();
+      });
+    });
+  };
+})();
