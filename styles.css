@@ -65,3 +65,23 @@ body { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
 
 .chart { height: 160px; background: #0b1220; border: 1px solid var(--border); border-radius: 10px; }
 .empty { text-align:center; color: var(--muted); padding: 16px; }
+/* === analytics layout (append) === */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .charts-grid { grid-template-columns: 1fr 1fr; }
+}
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.chart-card .card-title {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
