@@ -93,3 +93,6 @@ body { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
 @media (max-width: 420px) {
   .cards { grid-template-columns: 1fr 1fr; }
 }
+/* ===== PATCH: Settings actions row ===== */
+.settings-actions { display:flex; gap:8px; align-items:center; margin-top:8px; }
+#settingsSaved { font-weight:600; }
