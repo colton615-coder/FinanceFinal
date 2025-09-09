@@ -430,3 +430,116 @@ function _monthSlice(transactions) {
     markSaved();
   });
 })();
+/* =========================
+   PATCH: Chart.js theming (colors, gradients, pro look)
+   - Applies to existing charts (trend, categories, income/expense)
+   - Reacts to theme changes and window resize
+   ========================= */
+(function fancyCharts(){
+  if (!window.Chart) return;
+
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  function hexToRgba(hex, alpha = 1) {
+    const h = hex.replace('#','');
+    const bigint = parseInt(h.length === 3 ? h.split('').map(x=>x+x).join('') : h, 16);
+    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  function palette() {
+    return [
+      cssVar('--ch1','#60a5fa'),
+      cssVar('--ch2','#34d399'),
+      cssVar('--ch3','#f472b6'),
+      cssVar('--ch4','#f59e0b'),
+      cssVar('--ch5','#a78bfa'),
+      cssVar('--ch6','#22d3ee'),
+    ];
+  }
+
+  function styleScales(opts) {
+    const tick = cssVar('--fg', '#e5e7eb');
+    const grid = 'rgba(107, 114, 128, 0.20)'; // slate-500 @ 20%
+    if (opts.scales?.x) {
+      opts.scales.x.ticks = Object.assign({ color: tick }, opts.scales.x.ticks || {});
+      opts.scales.x.grid  = Object.assign({ color: grid },  opts.scales.x.grid  || {});
+    }
+    if (opts.scales?.y) {
+      opts.scales.y.ticks = Object.assign({ color: tick }, opts.scales.y.ticks || {});
+      opts.scales.y.grid  = Object.assign({ color: grid },  opts.scales.y.grid  || {});
+    }
+    if (opts.plugins?.legend?.labels) {
+      opts.plugins.legend.labels.color = tick;
+    }
+  }
+
+  function updateAllCharts() {
+    const ids = ['ch-trend','ch-categories','ch-income-expense'];
+    ids.forEach((id, idx) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const chart = Chart.getChart(el);
+      if (!chart) return;
+
+      const pal = palette();
+      const p0 = pal[0], p1 = pal[1], p2 = pal[2];
+
+      // Global options polish
+      chart.options = chart.options || {};
+      chart.options.responsive = true;
+      chart.options.maintainAspectRatio = false;
+      chart.options.plugins = chart.options.plugins || {};
+      chart.options.plugins.tooltip = Object.assign({ backgroundColor: 'rgba(15,23,42,0.92)', titleColor:'#fff', bodyColor:'#e5e7eb', borderWidth:1, borderColor:'rgba(255,255,255,0.06)' }, chart.options.plugins.tooltip || {});
+      chart.options.plugins.legend = Object.assign({ labels: { color: cssVar('--fg','#e5e7eb') } }, chart.options.plugins.legend || {});
+      styleScales(chart.options);
+
+      if (chart.config.type === 'line') {
+        const ctx = chart.ctx;
+        const grad = ctx.createLinearGradient(0, 0, 0, chart.height);
+        grad.addColorStop(0, hexToRgba(p0, 0.22));
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        const ds = chart.data.datasets[0] || (chart.data.datasets[0] = {});
+        ds.borderColor   = p0;
+        ds.backgroundColor = grad;
+        ds.pointRadius   = 0;
+        ds.borderWidth   = 2;
+        ds.fill          = true;
+      }
+
+      if (chart.config.type === 'doughnut') {
+        const ds = chart.data.datasets[0] || (chart.data.datasets[0] = {});
+        ds.backgroundColor = palette().map(c => hexToRgba(c, 0.90));
+        ds.borderColor     = hexToRgba('#0b0c10', 1);  // matches dark bg nicely
+        ds.borderWidth     = 2;
+        chart.config.options = chart.config.options || {};
+        chart.config.options.cutout = '62%';
+      }
+
+      if (chart.config.type === 'bar') {
+        const ds = chart.data.datasets[0] || (chart.data.datasets[0] = {});
+        ds.backgroundColor = hexToRgba(p2, 0.88);
+        ds.borderColor     = hexToRgba(p2, 1);
+        ds.borderWidth     = 1.5;
+        ds.borderRadius    = 6;
+      }
+
+      chart.update();
+    });
+  }
+
+  // Recolor on state changes (after series rebuild), on theme changes, and on resize
+  document.addEventListener('state:changed', () => setTimeout(updateAllCharts, 0));
+  window.addEventListener('resize', () => setTimeout(updateAllCharts, 0));
+  try {
+    const originalApply = window.applyTheme;
+    window.applyTheme = function patchedApplyTheme() {
+      originalApply?.();
+      updateAllCharts();
+    };
+  } catch {}
+
+  // First pass after load (and after dashboard mount)
+  setTimeout(updateAllCharts, 400);
+})();
