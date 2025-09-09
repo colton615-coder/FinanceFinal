@@ -140,3 +140,11 @@ body { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
 @media (max-width: 420px) {
   .cards { grid-template-columns: 1fr 1fr; }
 }
+/* ===== PATCH: subtle pull-to-refresh affordance (optional) ===== */
+body.pull-refresh::before {
+  content: 'Refreshing…';
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 999px;
+  z-index: 9999;
+}
