@@ -543,3 +543,246 @@ function _monthSlice(transactions) {
   // First pass after load (and after dashboard mount)
   setTimeout(updateAllCharts, 400);
 })();
+/* =========================
+   PATCH: Haptics on taps (best-effort)
+   ========================= */
+(function haptics(){
+  const canVibrate = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+  window.haptic = (pattern='tap') => {
+    if (!canVibrate) return;
+    if (pattern === 'tap') navigator.vibrate(10);
+    else if (pattern === 'impact') navigator.vibrate([8,8]);
+    else if (pattern === 'success') navigator.vibrate([5,5,5]);
+  };
+  document.addEventListener('click', e=>{
+    if (e.target.closest?.('.btn') || e.target.closest?.('.tabbtn')) haptic('tap');
+  }, { passive: true });
+})();
+
+/* =========================
+   PATCH: Swipe between tabs (L/R)
+   ========================= */
+(function swipeTabs(){
+  const order = ['dashboard','overview','budgets','transactions','settings'];
+  let x0 = 0, y0 = 0;
+  const threshold = 45;
+  window.addEventListener('touchstart', e => {
+    const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY;
+  }, { passive: true });
+  window.addEventListener('touchend', e => {
+    const t = e.changedTouches[0]; const dx = t.clientX - x0; const dy = t.clientY - y0;
+    if (Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy)) return;
+    const cur = document.querySelector('.tab.active')?.id?.replace('tab-','') || 'overview';
+    const idx = order.indexOf(cur);
+    const next = dx < 0 ? order[Math.min(order.length-1, idx+1)] : order[Math.max(0, idx-1)];
+    if (next && next !== cur) { haptic('impact'); activateTab(next); document.dispatchEvent(new Event('tab:changed')); }
+  }, { passive: true });
+})();
+
+/* =========================
+   PATCH: Pull-to-refresh on Dashboard (data re-render)
+   ========================= */
+(function pullToRefresh(){
+  let startY = 0, armed = false;
+  window.addEventListener('touchstart', e => {
+    if (window.scrollY === 0 && document.getElementById('tab-dashboard')?.classList.contains('active')) {
+      startY = e.touches[0].clientY; armed = true;
+    }
+  }, { passive: true });
+  window.addEventListener('touchend', e => {
+    if (!armed) return; armed = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy > 70) { haptic('success'); document.dispatchEvent(new CustomEvent('state:changed', { detail: state })); renderAll(); }
+  }, { passive: true });
+})();
+
+/* =========================
+   PATCH: Recurring transactions (monthly | weekly | biweekly)
+   - Add [monthly] / [weekly] / [biweekly] to Description
+   - OR long-press Save (600ms) to create a monthly rule
+   ========================= */
+(function recurringEngine(){
+  if (!state.meta) state.meta = {};
+  if (!Array.isArray(state.recurring)) state.recurring = [];
+
+  function monthKey(d=new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+  function scheduleNext(rule, from) {
+    const d = new Date(from);
+    if (rule.cadence === 'weekly') d.setDate(d.getDate() + 7);
+    else if (rule.cadence === 'biweekly') d.setDate(d.getDate() + 14);
+    else d.setMonth(d.getMonth() + 1);
+    return d;
+  }
+
+  function applyRecurring() {
+    const today = new Date();
+    (state.recurring || []).forEach(rule => {
+      let due = new Date(rule.nextRunISO || rule.anchorISO || new Date());
+      // run all missed occurrences (safe catch-up)
+      let ran = false;
+      while (due <= today) {
+        state.transactions.unshift({
+          id: (crypto?.randomUUID?.() || String(Date.now())),
+          type: rule.type, desc: rule.desc, amount: Number(rule.amount),
+          category: rule.category || 'Other', dateISO: new Date(due).toISOString()
+        });
+        due = scheduleNext(rule, due);
+        ran = true;
+      }
+      if (ran) {
+        rule.nextRunISO = due.toISOString();
+      }
+    });
+    if ((state.recurring || []).length) { saveState(); renderAll(); }
+  }
+
+  // Long-press on Save to mark as recurring (default monthly)
+  const saveBtn = document.getElementById('saveTxn');
+  let pressTimer;
+  if (saveBtn) {
+    saveBtn.addEventListener('touchstart', ()=> { pressTimer = setTimeout(()=> saveBtn.dataset.longpress = '1', 600); }, { passive: true });
+    ['touchend','touchcancel','mouseup','mouseleave'].forEach(evt => saveBtn.addEventListener(evt, ()=> clearTimeout(pressTimer), { passive: true }));
+  }
+
+  // Intercept txn submit to optionally create rule
+  document.addEventListener('submit', function(e){
+    if (e.target?.id !== 'txnForm') return;
+    try {
+      const rawDesc = document.getElementById('txnDesc')?.value || '';
+      const tag = (rawDesc.match(/\[(monthly|weekly|biweekly)\]/i)||[])[1];
+      const makeRecurring = !!tag || (saveBtn?.dataset.longpress === '1');
+
+      if (makeRecurring) {
+        const cadence = (tag || 'monthly').toLowerCase();
+        const type = document.getElementById('txnType')?.value || 'expense';
+        const amtRaw = String(document.getElementById('txnAmount')?.value || '').replace(',','.');
+        const amount = parseFloat(amtRaw);
+        const category = (document.getElementById('txnCategory')?.value || 'Other').trim() || 'Other';
+        const desc = rawDesc.replace(/\[(monthly|weekly|biweekly)\]/ig,'').trim();
+        const anchor = new Date();
+        const next = scheduleNext({ cadence }, anchor);
+        state.recurring.push({
+          id: (crypto?.randomUUID?.() || String(Date.now())),
+          type, amount, category, desc,
+          cadence, anchorISO: anchor.toISOString(), nextRunISO: next.toISOString()
+        });
+        saveState();
+        saveBtn.dataset.longpress = '';
+      }
+    } catch {}
+  }, { capture: true });
+
+  // Run on load and then every 6 hours
+  applyRecurring();
+  setInterval(applyRecurring, 6 * 60 * 60 * 1000);
+})();
+
+/* =========================
+   PATCH: Budget rollovers (carry leftover -> next month)
+   - Stores state.rollovers { [category]: amount }
+   - Adjusts budget cards + KPI usedPct to include carry
+   ========================= */
+(function budgetRollovers(){
+  if (!state.meta) state.meta = {};
+  if (!state.meta.lastRolloverMonth) state.meta.lastRolloverMonth = '';
+  if (!state.rollovers) state.rollovers = {};
+
+  function monthKey(d=new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+
+  function applyRolloverIfNeeded() {
+    const nowKey = monthKey();
+    if (state.meta.lastRolloverMonth === nowKey) return;
+
+    const prev = new Date(); prev.setMonth(prev.getMonth() - 1);
+    const prevKey = monthKey(prev);
+
+    const spentByCat = {};
+    state.transactions
+      .filter(t => t.type === 'expense' && t.dateISO?.startsWith(prevKey))
+      .forEach(t => { const c = t.category || 'Other'; spentByCat[c] = (spentByCat[c] || 0) + Number(t.amount || 0); });
+
+    const carry = {};
+    state.budgets.forEach(b => {
+      const spent = spentByCat[b.category] || 0;
+      const leftover = Math.max(0, Number(b.amount || 0) - spent);
+      if (leftover > 0) carry[b.category] = (state.rollovers?.[b.category] || 0) + leftover;
+    });
+
+    state.rollovers = carry;
+    state.meta.lastRolloverMonth = nowKey;
+    saveState();
+  }
+
+  const _renderBudgets = window.renderBudgets;
+  window.renderBudgets = function patchedRenderBudgets(){
+    applyRolloverIfNeeded();
+
+    const wrap = document.getElementById('budgetList'); if (wrap) wrap.innerHTML = '';
+    const totalBase   = state.budgets.reduce((s,b)=>s + Number(b.amount || 0), 0);
+    const totalCarry  = state.budgets.reduce((s,b)=> s + (state.rollovers?.[b.category] || 0), 0);
+    const totalBudget = totalBase + totalCarry;
+    const totalSpent  = state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0);
+    const usedPct     = totalBudget ? Math.min(100, (totalSpent/totalBudget)*100) : 0;
+
+    const prog = document.getElementById('budgetProgress');
+    const used = document.getElementById('budgetUsedPct');
+    const rem  = document.getElementById('budgetRemaining');
+    if (prog) prog.style.width = `${usedPct.toFixed(1)}%`;
+    if (used) used.textContent = `${usedPct.toFixed(1)}% used`;
+    if (rem)  rem.textContent  = `${fmt(totalBudget - totalSpent, state.settings.currency)} remaining`;
+
+    const byCat = {};
+    state.transactions.filter(t=>t.type==='expense').forEach(t => {
+      const c = t.category || 'Other';
+      byCat[c] = (byCat[c] || 0) + Number(t.amount || 0);
+    });
+
+    state.budgets.forEach(b => {
+      const spent   = byCat[b.category] || 0;
+      const budget  = Number(b.amount || 0) + (state.rollovers?.[b.category] || 0);
+      const pct     = budget ? (spent / budget) * 100 : 0;
+      const over    = pct > 100;
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.innerHTML = `
+        <div>
+          <div><strong>${b.category}</strong></div>
+          <div class="meta">${fmt(spent, state.settings.currency)} of ${fmt(budget, state.settings.currency)}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="meta">${pct.toFixed(1)}% used</div>
+          ${over ? `<div class="meta" style="color:#f87171">Over by ${fmt(spent - budget, state.settings.currency)}</div>`
+                 : `<div class="meta">${fmt(budget - spent, state.settings.currency)} left</div>`}
+        </div>`;
+      document.getElementById('budgetList')?.appendChild(item);
+    });
+  };
+
+  const _calc = window.calcMonthTotals;
+  window.calcMonthTotals = function patchedCalcMonthTotals(){
+    applyRolloverIfNeeded();
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const monthTx = state.transactions.filter(t => t.dateISO?.startsWith(ym));
+    const income  = monthTx.filter(t => t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0);
+    const expenses= monthTx.filter(t => t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0);
+    const base    = state.budgets.reduce((s,b)=>s+Number(b.amount||0),0);
+    const carry   = Object.values(state.rollovers || {}).reduce((s,v)=>s+Number(v||0),0);
+    const totalBudget = base + carry;
+    const usedPct = totalBudget ? Math.min(100, Math.round((expenses/totalBudget)*100)) : 0;
+    return { income, expenses, net: income - expenses, usedPct, totalBudget };
+  };
+
+  applyRolloverIfNeeded();
+})();
+
+/* =========================
+   PATCH: Lighthouse helpers (idle work + passive listeners already used)
+   ========================= */
+(function lighthouseMicro(){
+  const idle = window.requestIdleCallback || (fn => setTimeout(fn, 1));
+  idle(() => {
+    // trigger lazy dashboard series build without blocking first paint
+    document.dispatchEvent(new CustomEvent('state:changed', { detail: state }));
+  });
+})();
