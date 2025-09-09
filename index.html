@@ -2,10 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <!-- disable zoom + support iOS safe areas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+
     <title>Budget Mobile</title>
 
     <!-- PWA -->
@@ -191,7 +190,6 @@
             <input id="compactToggle" type="checkbox" />
           </div>
 
-          <!-- NEW: explicit save row -->
           <div class="settings-actions">
             <button id="settingsSaveBtn" class="btn">Save Changes</button>
             <button id="settingsRevertBtn" class="btn ghost">Revert</button>
