@@ -379,3 +379,54 @@ function _monthSlice(transactions) {
   // On first load, broadcast current state so listeners get initial values
   document.dispatchEvent(new CustomEvent("state:changed", { detail: window.state }));
 })();
+/* =========================
+   PATCH: Explicit Save/Revert UI for Settings
+   ========================= */
+(function settingsSaveUI(){
+  const saveBtn   = document.getElementById('settingsSaveBtn');
+  const revertBtn = document.getElementById('settingsRevertBtn');
+  const savedLbl  = document.getElementById('settingsSaved');
+  const themeSel  = document.getElementById('themeSelect');
+  const curSel    = document.getElementById('currencySelect');
+  const compactT  = document.getElementById('compactToggle');
+
+  if (!saveBtn || !revertBtn) return;
+
+  function markUnsaved(){
+    if (savedLbl){
+      savedLbl.textContent = 'Unsaved changes';
+      savedLbl.classList.remove('hidden');
+    }
+  }
+  function markSaved(){
+    if (savedLbl){
+      savedLbl.textContent = 'Saved';
+      savedLbl.classList.remove('hidden');
+      setTimeout(()=> savedLbl.classList.add('hidden'), 1200);
+    }
+  }
+
+  // Show "unsaved" note when user tweaks controls
+  [themeSel, curSel, compactT].forEach(n => {
+    if (!n) return;
+    n.addEventListener('input',  markUnsaved);
+    n.addEventListener('change', markUnsaved);
+  });
+
+  // Save button just forces a save + reapplies theme (autosave already occurs)
+  saveBtn.addEventListener('click', () => {
+    try { saveState(); applyTheme(); } catch {}
+    markSaved();
+  });
+
+  // Revert restores controls from current saved state
+  revertBtn.addEventListener('click', () => {
+    try {
+      if (themeSel) themeSel.value = state.settings.theme || 'auto';
+      if (curSel)   curSel.value   = state.settings.currency || 'USD';
+      if (compactT) compactT.checked = !!state.settings.compact;
+      applyTheme();
+    } catch {}
+    markSaved();
+  });
+})();
