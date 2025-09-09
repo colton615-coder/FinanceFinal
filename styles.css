@@ -96,3 +96,47 @@ body { padding-bottom: max(64px, env(safe-area-inset-bottom)); }
 /* ===== PATCH: Settings actions row ===== */
 .settings-actions { display:flex; gap:8px; align-items:center; margin-top:8px; }
 #settingsSaved { font-weight:600; }
+/* ===== PATCH: Pro color palette + polished UI ===== */
+
+/* Chart palette (hex on purpose so we can blend easily in JS) */
+:root {
+  --ch1: #60a5fa; /* blue */
+  --ch2: #34d399; /* emerald */
+  --ch3: #f472b6; /* pink */
+  --ch4: #f59e0b; /* amber */
+  --ch5: #a78bfa; /* violet */
+  --ch6: #22d3ee; /* cyan */
+}
+
+/* Fancy buttons (subtle gradient, still readable in dark mode) */
+.btn {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.25);
+}
+.btn:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; box-shadow: none; }
+.btn.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+
+/* Cards/panels with soft depth */
+.card, .panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.10));
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.40);
+}
+
+/* Tabbar polish */
+.tabbar {
+  backdrop-filter: saturate(140%) blur(6px);
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Chart canvas sizing for mobile readability */
+#tab-dashboard .panel { min-height: 260px; }
+#tab-dashboard canvas { width: 100% !important; height: 280px !important; display: block; }
+
+/* Category legend spacing on small screens */
+@media (max-width: 420px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
