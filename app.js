@@ -786,3 +786,183 @@ function _monthSlice(transactions) {
     document.dispatchEvent(new CustomEvent('state:changed', { detail: state }));
   });
 })();
+/* =========================
+   PATCH: fix light mode toggle (explicit classes)
+   ========================= */
+(function fixThemeToggle(){
+  const root = document.documentElement;
+  function setThemeClass(){
+    const t = (state?.settings?.theme) || 'auto';
+    root.classList.remove('theme-light','theme-dark');
+    if (t === 'light') root.classList.add('theme-light');
+    else if (t === 'dark') root.classList.add('theme-dark');
+    else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.add(prefersDark ? 'theme-dark' : 'theme-light');
+    }
+  }
+  // wrap existing applyTheme so charts still update
+  const prev = window.applyTheme;
+  window.applyTheme = function patchedApplyTheme(){
+    setThemeClass();
+    prev?.();
+  };
+  // initial pass + react to system changes in auto mode
+  setThemeClass();
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener?.('change', () => {
+      if ((state?.settings?.theme) === 'auto') window.applyTheme();
+    });
+  } catch {}
+})();
+
+/* =========================
+   PATCH: subcategories support (Category > Subcategory)
+   - parse input like "Food > Groceries" or "Food/Groceries"
+   ========================= */
+(function subcategories(){
+  window.parseCategory = function(str=''){
+    const raw = String(str).trim();
+    if (!raw) return { category: 'Other', subcategory: '' };
+    const split = raw.split(/>|\/|:/).map(s => s.trim()).filter(Boolean);
+    return { category: split[0] || 'Other', subcategory: split[1] || '' };
+  };
+})();
+
+/* =========================
+   PATCH: robust submit (create or edit) + subcategory parsing
+   - Capturing listener runs BEFORE old handler, then stops it
+   ========================= */
+(function submitOverride(){
+  const form = document.getElementById('txnForm');
+  if (!form) return;
+
+  function closeTxnDialog(){
+    const d = document.getElementById('txnDialog');
+    if (!d) return;
+    d.classList.remove('is-open'); d.removeAttribute('open');
+  }
+
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    try {
+      const isEdit = !!window.__editTxnId;
+      const type = document.getElementById('txnType')?.value || 'expense';
+      const desc = (document.getElementById('txnDesc')?.value || '').replace(/\[(monthly|weekly|biweekly)\]/ig, '').trim();
+      const amtRaw = String(document.getElementById('txnAmount')?.value || '').replace(',', '.');
+      const amount = parseFloat(amtRaw);
+      const catInput = (document.getElementById('txnCategory')?.value || '').trim();
+      const { category, subcategory } = window.parseCategory(catInput);
+      if (!desc || isNaN(amount)) return;
+
+      if (isEdit) {
+        const idx = state.transactions.findIndex(t => t.id === window.__editTxnId);
+        if (idx >= 0) {
+          Object.assign(state.transactions[idx], { type, desc, amount, category, subcategory });
+        }
+        window.__editTxnId = '';
+      } else {
+        state.transactions.unshift({
+          id: (crypto?.randomUUID?.() || String(Date.now())),
+          type, desc, amount, category, subcategory,
+          dateISO: new Date().toISOString()
+        });
+      }
+
+      saveState();
+      form.reset();
+      closeTxnDialog();
+      renderAll();
+    } catch(e){ console.error('txn submit failed', e); }
+  }, true);
+})();
+
+/* =========================
+   PATCH: swipe to reveal Edit/Delete actions in Transactions
+   ========================= */
+(function swipeActions(){
+  const orig = window.renderTransactions;
+  window.renderTransactions = function patchedRenderTransactions(){
+    orig?.();
+
+    const wrap = document.getElementById('txnList');
+    if (!wrap) return;
+
+    // attach actions to each item
+    [...wrap.querySelectorAll('.item')].forEach((node, i) => {
+      // skip if already processed
+      if (node.dataset.enhanced === '1') return;
+      node.dataset.enhanced = '1';
+
+      // find the transaction by matching text and amount fallback (best effort)
+      let tx = null;
+      const title = node.querySelector('strong')?.textContent?.trim();
+      const amountTxt = node.querySelector('[style*="text-align:right"]')?.textContent?.trim() || '';
+      const sign = amountTxt.startsWith('+') ? 1 : -1;
+      const value = parseFloat(amountTxt.replace(/[^\d.]/g,''));
+      tx = state.transactions.find(t => t.desc === title && Math.abs(t.amount - value) < 0.001);
+
+      // mark up structure
+      const slide = document.createElement('div');
+      slide.className = 'slide';
+      slide.innerHTML = node.innerHTML;
+      node.innerHTML = '';
+      node.appendChild(slide);
+      node.classList.add('swipeable');
+
+      // actions
+      const actions = document.createElement('div');
+      actions.className = 'item-actions';
+      const btnEdit = document.createElement('button'); btnEdit.className = 'btn edit'; btnEdit.textContent = 'Edit';
+      const btnDel  = document.createElement('button'); btnDel.className  = 'btn delete'; btnDel.textContent = 'Delete';
+      actions.appendChild(btnEdit); actions.appendChild(btnDel);
+      node.appendChild(actions);
+
+      // show subcategory if present
+      if (tx?.subcategory) {
+        const meta = node.querySelector('.meta');
+        if (meta) meta.textContent = meta.textContent.replace('•', `• ${tx.category} › ${tx.subcategory} •`);
+      }
+
+      // swipe logic
+      let x0 = 0, dx = 0, open = false;
+      node.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; dx = 0; }, { passive: true });
+      node.addEventListener('touchmove', e => {
+        dx = e.touches[0].clientX - x0;
+        if (dx < 0) slide.style.transform = `translateX(${Math.max(-104, dx)}px)`;
+      }, { passive: true });
+      node.addEventListener('touchend', () => {
+        open = dx < -60;
+        node.classList.toggle('revealed', open);
+        slide.style.transform = open ? 'translateX(-104px)' : 'translateX(0)';
+      }, { passive: true });
+
+      // actions handlers
+      btnEdit.addEventListener('click', () => {
+        if (!tx) return;
+        const dlg = document.getElementById('txnDialog');
+        const openSafe = () => { dlg.classList.add('is-open'); dlg.setAttribute('open','true'); };
+        document.getElementById('txnType').value = tx.type;
+        document.getElementById('txnDesc').value = tx.desc;
+        document.getElementById('txnAmount').value = String(tx.amount);
+        document.getElementById('txnCategory').value = tx.subcategory ? `${tx.category} > ${tx.subcategory}` : tx.category;
+        window.__editTxnId = tx.id;
+        openSafe();
+      });
+      btnDel.addEventListener('click', () => {
+        if (!tx) return;
+        if (confirm('Delete this transaction?')) {
+          const idx = state.transactions.findIndex(t => t.id === tx.id);
+          if (idx >= 0) state.transactions.splice(idx, 1);
+          saveState(); renderAll();
+        }
+      });
+    });
+  };
+})();
+
+/* =========================
+   PATCH: recurring weekly/monthly via tags (already supported)
+   Notes: add [weekly] or [monthly] in Description or long-press Save
+   ========================= */
