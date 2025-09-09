@@ -198,3 +198,15 @@ html, body, .content, .tab, .panel, .tabbar { overflow-x: hidden; }
 
 /* keep charts from causing sideways overflow */
 canvas { max-width: 100%; }
+/* ===== PATCH: transaction row polish ===== */
+.item { border-radius: 14px; position: relative; }
+.item .slide { transition: transform .2s ease; }
+.item.revealed .slide { transform: translateX(-104px); }
+.item-actions { right: 12px; }
+.item .amount { font-weight: 800; letter-spacing: .2px; }
+.item .amount.expense { color: #ef4444 !important; text-shadow: 0 0 18px rgba(239,68,68,.18); }
+.item .amount.income { color: #22c55e !important; text-shadow: 0 0 18px rgba(34,197,94,.18); }
+
+/* keep layout locked; no accidental sideways scroll */
+html, body, .content, .tab, .panel, .tabbar { overflow-x: hidden; }
+canvas { max-width: 100%; }
