@@ -333,5 +333,188 @@
   setActive(bootTab);
 })();
 </script>
+<!-- ===== PATCH-TX: Add Transaction (sheet + categories) ===== -->
+<style>
+  /* compact pill button */
+  .btn-pill{padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
+    background:#1a1d24;color:#e9edf4;font-weight:600;font-size:14px}
+  .btn-pill:active{transform:translateY(1px)}
+
+  /* bottom sheet modal */
+  #txModal{position:fixed;inset:0;display:none;z-index:50}
+  #txModal.show{display:block}
+  #txModal .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+  #txModal .card{position:absolute;left:0;right:0;bottom:0;background:#14161b;color:#e9edf4;
+    border-radius:16px 16px 0 0;padding:16px;max-height:75vh;overflow:auto;
+    box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+  #txModal .title{font-weight:800;font-size:18px;margin-bottom:10px}
+  #txModal label{font-size:12px;opacity:.8;margin-bottom:6px;display:block}
+  #txModal input, #txModal select{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.1);
+    background:#0f1116;color:#e9edf4}
+  #txModal .row{display:flex;gap:10px;align-items:center;margin:10px 0}
+  #txModal .seg{display:flex;background:#0f1116;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden}
+  #txModal .seg button{flex:1;padding:8px 10px;border:0;background:transparent;color:#cfd6e4}
+  #txModal .seg button.active{background:#2a2f3a;color:#fff;font-weight:700}
+  #txModal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+  .btn-secondary{padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#1a1d24;color:#e9edf4}
+  .btn-primary{padding:10px 14px;border-radius:10px;border:0;background:#4c6fff;color:#fff;font-weight:700}
+</style>
+
+<div id="txModal" aria-hidden="true">
+  <div class="backdrop"></div>
+  <div class="card" role="dialog" aria-modal="true">
+    <div class="title">Add Transaction</div>
+
+    <div class="row">
+      <label>Type</label>
+      <div class="seg" id="txTypeSeg">
+        <button type="button" data-type="expense" class="active">Expense</button>
+        <button type="button" data-type="income">Income</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div style="flex:1">
+        <label>Amount ($)</label>
+        <input id="txAmount" type="number" step="0.01" inputmode="decimal" placeholder="0.00">
+      </div>
+      <div style="flex:1">
+        <label>Date/Time</label>
+        <input id="txDate" type="datetime-local">
+      </div>
+    </div>
+
+    <div class="row" style="flex-direction:column">
+      <label>Description</label>
+      <input id="txDesc" type="text" placeholder="e.g., Groceries">
+    </div>
+
+    <div class="row">
+      <div style="flex:1">
+        <label>Category</label>
+        <select id="txCat"></select>
+      </div>
+      <div style="flex:1">
+        <label>Subcategory</label>
+        <select id="txSub"></select>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-secondary" id="txCancel">Cancel</button>
+      <button class="btn-primary" id="txSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== TX ADD SHEET LOGIC ===== */
+(function(){
+  const $ = s=>document.querySelector(s);
+
+  // Ensure an "+ Add" button exists on the Transactions panel header
+  function ensureTxAddBtn(){
+    const panel = document.getElementById('panel-transactions');
+    if(!panel) return;
+    const title = panel.querySelector('.section-title');
+    if(!title || panel.querySelector('#txAddBtn')) return;
+    const btn = document.createElement('button');
+    btn.id='txAddBtn'; btn.className='btn-pill'; btn.textContent = '+ Add';
+    btn.addEventListener('click', ()=>openTxModal('expense'));
+    title.insertAdjacentElement('afterend', btn);
+  }
+  ensureTxAddBtn();
+  window.addEventListener('hashchange', ()=>{ if((location.hash||'').includes('transactions')) ensureTxAddBtn(); });
+
+  // Category tree (simple, editable)
+  const CAT = {
+    "Income": ["Paycheck","Bonus","Other"],
+    "Rent & Housing": ["Rent","Utilities","Internet","Maintenance"],
+    "Food": ["Groceries","Dining Out","Coffee","Misc"],
+    "Transport": ["Gas","Rideshare","Parking","Public Transit","Tolls"],
+    "Subscriptions": ["Netflix","Spotify","iCloud","Other"],
+    "Personal": ["Amazon","Clothes","Health","Other"],
+    "Insurance": ["Car","Medical","Renters","Other"],
+    "Debt": ["Credit Card","Loan","Other"],
+    "Savings": ["Emergency Fund","Investments","Other"]
+  };
+
+  // Storage helpers
+  function getTx(){ try{return JSON.parse(localStorage.getItem('transactions')||'[]');}catch(e){return [];} }
+  function setTx(a){ localStorage.setItem('transactions', JSON.stringify(a)); }
+
+  // Modal wires
+  const modal = $('#txModal');
+  const amount = $('#txAmount'), desc = $('#txDesc'), dateIn = $('#txDate');
+  const catSel = $('#txCat'), subSel = $('#txSub'), seg = $('#txTypeSeg');
+
+  function populate(type){
+    const cats = Object.keys(CAT).filter(c => type==='income' ? c==='Income' : c!=='Income');
+    catSel.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+    const lastCat = localStorage.getItem('lastCat');
+    if(lastCat && cats.includes(lastCat)) catSel.value = lastCat;
+    populateSub();
+  }
+  function populateSub(){
+    const subs = CAT[catSel.value] || ['Other'];
+    subSel.innerHTML = subs.map(s=>`<option value="${s}">${s}</option>`).join('');
+    const lastSub = localStorage.getItem('lastSub');
+    if(lastSub && subs.includes(lastSub)) subSel.value = lastSub;
+  }
+  catSel.addEventListener('change', populateSub);
+
+  seg.addEventListener('click', (e)=>{
+    const b = e.target.closest('button[data-type]'); if(!b) return;
+    seg.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    populate(b.dataset.type);
+  });
+
+  function openTxModal(defaultType='expense'){
+    seg.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.type===defaultType));
+    populate(defaultType);
+    amount.value = ''; desc.value=''; 
+    // default now in local timezone for iOS
+    const now = new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+    dateIn.value = now.toISOString().slice(0,16);
+    modal.classList.add('show');
+  }
+  window.openTxModal = openTxModal; // optional external use
+
+  function closeTxModal(){ modal.classList.remove('show'); }
+  $('#txCancel').addEventListener('click', closeTxModal);
+  modal.querySelector('.backdrop').addEventListener('click', closeTxModal);
+
+  // Save
+  $('#txSave').addEventListener('click', ()=>{
+    const type = seg.querySelector('.active')?.dataset.type || 'expense';
+    const amt = Math.abs(parseFloat(amount.value||'0'));
+    if(!amt){ alert('Enter an amount'); return; }
+    const when = new Date(dateIn.value || new Date());
+    const tx = {
+      id: 'tx_'+Date.now(),
+      type,
+      amount: +amt.toFixed(2),
+      description: desc.value?.trim() || (type==='income'?'Quick income':'Quick expense'),
+      category: catSel.value,
+      subcategory: subSel.value,
+      date: when.toISOString()
+    };
+    localStorage.setItem('lastCat', tx.category);
+    localStorage.setItem('lastSub', tx.subcategory);
+
+    const arr = getTx(); arr.push(tx); setTx(arr);
+    closeTxModal();
+
+    // Re-render if app exposes a redraw; otherwise simple reload keeps hash (stays on tab)
+    if (typeof window.recalcAndRender === 'function') { window.recalcAndRender(); }
+    else if (typeof window.renderTxAll === 'function') { window.renderTxAll && window.renderTxAll(); }
+    else { location.reload(); }
+  });
+
+  // Allow Enter to save from amount/desc
+  [amount, desc].forEach(el => el.addEventListener('keydown', e=>{ if(e.key==='Enter') $('#txSave').click(); }));
+})();
+</script>
 </body>
 </html>
