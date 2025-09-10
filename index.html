@@ -56,6 +56,36 @@
 
   <!-- Chart.js for graphs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+/* ===== PATCH H: iOS viewport & safe-area hotfix ===== */
+/* Shrink bars a touch for iPhone and stop the double top gap */
+:root { --hdr-h:56px; --nav-h:62px; }
+
+/* Let the page size from the small viewport height to avoid Safari chrome jumps */
+html, body { height:auto; }
+.app{
+  /* was: height:100dvh; padding-top:calc(env(safe-area-inset-top) + var(--hdr-h)); */
+  min-height:100svh;
+  padding-top:var(--hdr-h); /* remove duplicate safe-area from here */
+  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));
+}
+
+/* Give the header the safe-area instead */
+.header{
+  height:calc(var(--hdr-h) + env(safe-area-inset-top));
+  padding-top:env(safe-area-inset-top);
+}
+
+/* Recompute scroll area using svh and no top safe-area */
+.content{
+  height:calc(100svh - var(--hdr-h) - var(--nav-h) - env(safe-area-inset-bottom));
+}
+
+/* Keep FAB comfortably above the nav */
+.fab{
+  bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+}
+</style>
 </head>
 <body>
   <div class="app">
@@ -403,5 +433,18 @@
   document.getElementById('budgetInput').value = String(budgetTotal);
   recalcAndRender();
   </script>
+  <script>
+/* ===== PATCH I: limit FAB to sensible tabs & reapply active state ===== */
+(function(){
+  const origSetActive = window.setActive;
+  window.setActive = function(tab){
+    origSetActive(tab);
+    const fab = document.getElementById('quickAdd');
+    if (fab) fab.style.display = (tab === 'dashboard' || tab === 'transactions') ? 'grid' : 'none';
+  };
+  // re-apply to current route after override so the FAB state updates
+  window.setActive((location.hash || '#dashboard').slice(1));
+})();
+</script>
 </body>
 </html>
