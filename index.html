@@ -3,452 +3,219 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Pennywise — Dashboard</title>
-
-  <!-- ===== Compact Layout + Fixed Tabs (Patch A CSS) ===== -->
+  <title>Dashboard</title>
   <style>
-    :root{ --nav-h:64px; --hdr-h:60px; --card-gap:14px; --radius:14px; }
-    html,body{ height:100%; overflow:hidden; }
-    body{ margin:0; background:#0e0f12; color:#e9edf4; -webkit-font-smoothing:antialiased; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
-    .app{ height:100dvh; padding-top:calc(env(safe-area-inset-top) + var(--hdr-h)); padding-bottom:calc(env(safe-area-inset-bottom) + var(--nav-h)); }
-    .header{ position:fixed; top:0; left:0; right:0; height:var(--hdr-h); display:flex; align-items:center; padding:0 18px; z-index:10; background:linear-gradient(#0e0f12, rgba(14,15,18,0.75)); border-bottom:1px solid rgba(255,255,255,0.04);}
-    .header h1{ font-size:28px; letter-spacing:0.3px; margin:0; }
-    .content{ position:relative; height:calc(100dvh - var(--hdr-h) - var(--nav-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:16px; gap:var(--card-gap); display:flex; flex-direction:column; }
-    .card{ background:#14161b; border-radius:var(--radius); padding:14px 16px; box-shadow:0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 30px rgba(0,0,0,0.25); }
-    .card.compact{ padding:10px 12px; }
-    .kpi{ display:grid; grid-template-columns:1fr 1fr; gap:var(--card-gap); }
-    .kpi .tile{ background:#14161b; border-radius:var(--radius); padding:12px 14px; }
-    .kpi .value{ font-size:22px; font-weight:800; }
-    .kpi .label{ font-size:12px; opacity:.7; margin-top:2px; }
-    .row{ display:flex; gap:var(--card-gap); align-items:stretch; }
-    .row > .card{ flex:1; }
+    :root{ --nav-h:62px; --gap:14px; --radius:14px; }
+    html,body{ height:auto; margin:0; background:#0e0f12; color:#e9edf4;
+      -webkit-font-smoothing:antialiased; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+    .app{ min-height:100svh; padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom)); }
+    .content{ padding:16px; padding-top:calc(10px + env(safe-area-inset-top)); max-width:760px; margin:0 auto;
+      overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:var(--gap); }
+    h1.title{ font-size:36px; letter-spacing:.2px; margin:0 0 4px 0; }
+    .grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); }
+    .card{ background:#14161b; border-radius:var(--radius); padding:14px 16px;
+      box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 6px 20px rgba(0,0,0,.22); }
+    .kpi .label{ font-size:12px; opacity:.7; }
+    .kpi .value{ font-size:22px; font-weight:800; margin-top:2px; }
     .muted{ opacity:.75; font-size:12px; }
-    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; background:#101217; border:1px solid rgba(255,255,255,.06); font-size:12px; }
-    .pos{ color:#87e890; } .neg{ color:#ff6f6f; }
-
-    /* charts */
-    .chart-wrap{ background:#14161b; border-radius:var(--radius); padding:10px 12px; }
+    .chart-wrap{ background:#14161b; border-radius:var(--radius); padding:10px 12px; height:210px; }
     canvas{ max-width:100%; }
-
-    /* budget ring (Patch E styles) */
-    .ring{ width:110px; height:110px; border-radius:50%; background:
-    conic-gradient(#3f7cff var(--pct), #272a31 0);
-    display:grid; place-items:center; }
-    .ring span{ font-weight:800; }
-
-    /* fixed bottom nav */
-    .nav{ position:fixed; left:0; right:0; bottom:0; height:var(--nav-h);
-      padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:rgba(15,16,20,0.9); backdrop-filter:blur(8px); display:flex; gap:10px; justify-content:space-around; align-items:center; z-index:20; border-top:1px solid rgba(255,255,255,0.06);}
-    .nav .item{ flex:1; text-align:center; font-size:12px; opacity:.7; color:#e9edf4; text-decoration:none; padding:6px 0; }
-    .nav .item.active{ opacity:1; font-weight:700; }
-
-    /* floating quick add (Patch B) */
-    .fab{ position:fixed; right:18px; bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom)); width:56px; height:56px; border-radius:50%; display:grid; place-items:center; background:#4c6fff; color:white; font-size:24px; z-index:22; box-shadow:0 8px 24px rgba(0,0,0,.35); user-select:none; }
-
-    /* transactions list (lite) */
+    .section-title{ font-weight:800; font-size:20px; margin:0 0 8px 0; }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; background:#101217; border:1px solid rgba(255,255,255,.06); font-size:12px; }
     .tx{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px dashed rgba(255,255,255,.06); }
     .tx:last-child{ border-bottom:none; }
-    .tx .left{ display:flex; flex-direction:column; gap:2px; }
-    .tx .desc{ font-weight:600; }
     .tx .meta{ font-size:12px; opacity:.7; }
-    * { overscroll-behavior:contain; }
+    .pos{ color:#87e890; } .neg{ color:#ff6f6f; }
+    /* bottom nav — fixed, simple */
+    .nav{ position:fixed; left:0; right:0; bottom:0; height:var(--nav-h);
+      padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:rgba(15,16,20,.92);
+      backdrop-filter:blur(8px); display:flex; gap:10px; justify-content:space-around; align-items:center;
+      border-top:1px solid rgba(255,255,255,.06); z-index:20;}
+    .nav a{ flex:1; text-align:center; color:#e9edf4; text-decoration:none; font-size:12px; opacity:.75; }
+    .nav a.active{ opacity:1; font-weight:700; }
+    *{ overscroll-behavior:contain; -webkit-tap-highlight-color:transparent; }
   </style>
-
-  <!-- Chart.js for graphs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<style>
-/* ===== PATCH H: iOS viewport & safe-area hotfix ===== */
-/* Shrink bars a touch for iPhone and stop the double top gap */
-:root { --hdr-h:56px; --nav-h:62px; }
-
-/* Let the page size from the small viewport height to avoid Safari chrome jumps */
-html, body { height:auto; }
-.app{
-  /* was: height:100dvh; padding-top:calc(env(safe-area-inset-top) + var(--hdr-h)); */
-  min-height:100svh;
-  padding-top:var(--hdr-h); /* remove duplicate safe-area from here */
-  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));
-}
-
-/* Give the header the safe-area instead */
-.header{
-  height:calc(var(--hdr-h) + env(safe-area-inset-top));
-  padding-top:env(safe-area-inset-top);
-}
-
-/* Recompute scroll area using svh and no top safe-area */
-.content{
-  height:calc(100svh - var(--hdr-h) - var(--nav-h) - env(safe-area-inset-bottom));
-}
-
-/* Keep FAB comfortably above the nav */
-.fab{
-  bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
-}
-</style>
 </head>
 <body>
   <div class="app">
-
-    <!-- ===== PATCH B START: Header + Quick Add FAB ===== -->
-    <div class="header"><h1 id="viewTitle">Dashboard</h1></div>
-    <div class="fab" id="quickAdd" aria-label="Quick add">＋</div>
-    <!-- ===== PATCH B END ===== -->
-
     <div class="content">
+      <h1 class="title" id="viewTitle">Dashboard</h1>
 
-      <!-- ===== DASHBOARD ===== -->
-      <section id="panel-dashboard">
-        <div class="kpi">
-          <div class="tile">
-            <div class="muted">Income</div>
-            <div class="value" id="incomeVal">$0.00</div>
-            <div class="label">This month</div>
-          </div>
-          <div class="tile">
-            <div class="muted">Expenses</div>
-            <div class="value" id="expenseVal">$0.00</div>
-            <div class="label">This month</div>
-          </div>
-          <div class="tile">
-            <div class="muted">Net</div>
-            <div class="value" id="netVal">$0.00</div>
-            <div class="label">This month</div>
-          </div>
-
-          <!-- ===== PATCH E: Budget Ring Card ===== -->
-          <div class="tile" id="budgetCard">
-            <div style="display:flex; align-items:center; gap:14px;">
-              <div class="ring" id="budgetRing" style="--pct: 0%;">
-                <span id="budgetPct">0%</span>
-              </div>
-              <div>
-                <div style="font-weight:700">Budget Used</div>
-                <div id="budgetDetail" class="muted">of total budget</div>
-              </div>
-            </div>
-          </div>
-          <!-- ===== /PATCH E ===== -->
-        </div>
-
-        <div class="row">
-          <div class="card" style="flex:1;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-weight:700;">Daily Expenses (7d)</div>
-              <span class="pill" id="dailyTotalPill">$0 last 7d</span>
-            </div>
-            <div class="chart-wrap" style="height:180px;">
-              <canvas id="daily7d"></canvas>
-            </div>
-          </div>
-
-          <div class="card" style="flex:1;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-weight:700;">30-Day Running Balance</div>
-              <span class="pill" id="runBalancePill">Opening $0</span>
-            </div>
-            <div class="chart-wrap" style="height:200px;">
-              <canvas id="run30"></canvas>
-            </div>
-          </div>
-        </div>
-
+      <!-- KPIs -->
+      <div class="grid kpi">
         <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div style="font-weight:700;">Recent Transactions</div>
-            <span class="muted" id="txCount">0 items</span>
-          </div>
-          <div id="txList"></div>
+          <div class="label">Income</div>
+          <div class="value" id="incomeVal">$0.00</div>
+          <div class="label">This month</div>
         </div>
-      </section>
-
-      <!-- ===== OVERVIEW (placeholder mirrors dash) ===== -->
-      <section id="panel-overview" style="display:none;">
-        <div class="card"><div style="font-weight:700;">Overview</div><div class="muted">Same KPIs as Dashboard. Future: goals & envelopes.</div></div>
-      </section>
-
-      <!-- ===== BUDGETS ===== -->
-      <section id="panel-budgets" style="display:none;">
-        <div class="card"><div style="font-weight:700;">Budgets</div><div class="muted">Set total monthly budget in Settings to power the ring & projections.</div></div>
-      </section>
-
-      <!-- ===== TRANSACTIONS ===== -->
-      <section id="panel-transactions" style="display:none;">
-        <div class="card"><div style="font-weight:700;">All Transactions</div></div>
-        <div class="card" id="txAll"></div>
-      </section>
-
-      <!-- ===== SETTINGS ===== -->
-      <section id="panel-settings" style="display:none;">
         <div class="card">
-          <div style="font-weight:700;">Settings</div>
-          <div style="margin-top:8px;">
-            <label class="muted">Monthly Budget Total ($)</label>
-            <div style="display:flex;gap:10px;margin-top:6px;">
-              <input id="budgetInput" type="number" step="1" min="0" inputmode="numeric" style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0f1116;color:#e9edf4;">
-              <button id="saveBudget" style="padding:10px 14px;border-radius:10px;border:0;background:#4c6fff;color:white;">Save</button>
-            </div>
-            <div class="muted" style="margin-top:6px;">Tip: set this to your target spend for the month (e.g., 4400).</div>
-          </div>
+          <div class="label">Expenses</div>
+          <div class="value" id="expenseVal">$0.00</div>
+          <div class="label">This month</div>
         </div>
-      </section>
+        <div class="card">
+          <div class="label">Net</div>
+          <div class="value" id="netVal">$0.00</div>
+          <div class="label">This month</div>
+        </div>
+        <div class="card">
+          <div class="label">Budget Used</div>
+          <div class="value" id="budgetUsedPct">0%</div>
+          <div class="label" id="budgetUsedDetail">of total budget</div>
+        </div>
+      </div>
 
+      <!-- Charts (stacked) -->
+      <div class="card">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Daily Expenses (7d)</span>
+          <span class="pill" id="dailyTotalPill">$0 last 7d</span>
+        </div>
+        <div class="chart-wrap"><canvas id="daily7d"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>30-Day Running Balance</span>
+          <span class="pill" id="runBalancePill">Opening $0</span>
+        </div>
+        <div class="chart-wrap"><canvas id="run30"></canvas></div>
+      </div>
+
+      <!-- Recent transactions -->
+      <div class="card">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Recent Transactions</span>
+          <span class="muted" id="txCount">0 items</span>
+        </div>
+        <div id="txList"></div>
+      </div>
     </div>
 
-    <!-- ===== Bottom Tab Bar ===== -->
-    <nav class="nav">
-      <a href="#dashboard" class="item active" data-route="dashboard">Dashboard</a>
-      <a href="#overview" class="item" data-route="overview">Overview</a>
-      <a href="#budgets" class="item" data-route="budgets">Budgets</a>
-      <a href="#transactions" class="item" data-route="transactions">Transactions</a>
-      <a href="#settings" class="item" data-route="settings">Settings</a>
+    <!-- Bottom tabs -->
+    <nav class="nav" aria-label="Bottom navigation">
+      <a href="#dashboard" class="active">Dashboard</a>
+      <a href="#overview">Overview</a>
+      <a href="#budgets">Budgets</a>
+      <a href="#transactions">Transactions</a>
+      <a href="#settings">Settings</a>
     </nav>
   </div>
 
-  <!-- ===== JS: helpers, charts, routing, data glue ===== -->
+  <!-- Minimal glue (uses your data layer if present) -->
   <script>
-  // ---------- Finance helpers ----------
-  const sum = (arr, f=x=>x) => arr.reduce((a,c)=>a+f(c),0);
-  const byType = (tx, type) => tx.filter(t => t.type === type); // "income" | "expense"
-  const parseDate = s => new Date(s);
-  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return startOfDay(d); };
-
-  function calcSummary(transactions, month = new Date()){
-    const m = month.getMonth(), y = month.getFullYear();
-    const inMonth = transactions.filter(t => {
-      const d = parseDate(t.date);
-      return d.getMonth()===m && d.getFullYear()===y;
-    });
-    const income = sum(byType(inMonth, "income"), t=>+t.amount);
-    const expenses = sum(byType(inMonth, "expense"), t=>+t.amount);
-    const net = +(income - expenses).toFixed(2);
-    return { income, expenses, net, inMonth };
-  }
-
-  function dailyExpenses7d(transactions){
-    const buckets = Array.from({length:7}, (_,i)=>({ d: startOfDay(daysAgo(6-i)), total:0 }));
-    transactions.forEach(t=>{
-      if(t.type!=="expense") return;
-      const td = startOfDay(parseDate(t.date)).getTime();
-      const b = buckets.find(b=>b.d.getTime()===td);
-      if(b) b.total += +t.amount;
-    });
-    return buckets; // [{d, total}]
-  }
-
-  function runningBalance30d(transactions, opening=0){
-    const cutoff = daysAgo(29);
-    const inRange = transactions
-      .filter(t => parseDate(t.date) >= cutoff)
-      .sort((a,b)=> new Date(a.date)-new Date(b.date));
-    let bal = opening;
-    const series = [];
-    for (let d=0; d<30; d++){
-      const day = startOfDay(daysAgo(29-d));
-      inRange
-        .filter(t => startOfDay(parseDate(t.date)).getTime()===day.getTime())
-        .forEach(t => bal += (t.type==="income"? +t.amount : -Math.abs(+t.amount)));
-      series.push({ d: day, bal: +bal.toFixed(2) });
+    // prefer your data function if it exists
+    async function loadTransactions(){
+      try{
+        if(typeof getTransactions === 'function'){
+          const tx = await getTransactions(); if(Array.isArray(tx)) return tx;
+        }
+      }catch(e){}
+      const saved = localStorage.getItem('transactions');
+      return saved ? JSON.parse(saved) : [];
     }
-    return series;
-  }
 
-  function projectBudgetUsedPercent(budgetTotal, spentSoFar, today = new Date()){
-    const day = today.getDate();
-    const daysInMo = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
-    const avg = day>0 ? spentSoFar/day : 0;
-    const projected = avg*daysInMo;
-    const pctNow = budgetTotal ? (spentSoFar/budgetTotal)*100 : 0;
-    const pctProj = budgetTotal ? (projected/budgetTotal)*100 : 0;
-    return { pctNow: Math.min(100,pctNow), pctProj: Math.min(100,pctProj), projectedSpend: projected };
-  }
+    const sum = (arr, f=x=>x) => arr.reduce((a,c)=>a+f(c),0);
+    const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return startOfDay(d); };
 
-  // ---------- Chart defaults ----------
-  if(window.Chart){
-    Chart.defaults.color = '#cfd6e4';
-    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto';
-    Chart.defaults.scale.grid.color = 'rgba(255,255,255,0.06)';
-    Chart.defaults.plugins.legend.labels.boxWidth = 10;
-  }
-  function renderDaily7d(ctx, buckets){
-    const labels = buckets.map(b => (b.d.getMonth()+1)+'/'+b.d.getDate());
-    const data = buckets.map(b => +b.total.toFixed(2));
-    return new Chart(ctx, {
-      type:'bar',
-      data:{ labels, datasets:[{ label:'Spend', data, borderWidth:1 }]},
-      options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true }} }
-    });
-  }
-  function renderRunning30(ctx, series){
-    const labels = series.map(p => (p.d.getMonth()+1)+'/'+p.d.getDate());
-    const data = series.map(p => p.bal);
-    return new Chart(ctx, {
-      type:'line',
-      data:{ labels, datasets:[{ label:'Balance', data, tension:.35, pointRadius:0 }]},
-      options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:false } } }
-    });
-  }
+    function calcSummary(tx){
+      const now = new Date(), m = now.getMonth(), y = now.getFullYear();
+      const inMo = tx.filter(t => { const d = new Date(t.date); return d.getMonth()===m && d.getFullYear()===y; });
+      const income = sum(inMo.filter(t=>t.type==='income'), t=>+t.amount);
+      const expenses = sum(inMo.filter(t=>t.type==='expense'), t=>+t.amount);
+      return { income, expenses, net: +(income-expenses).toFixed(2) };
+    }
+    function daily7(tx){
+      const b = Array.from({length:7},(_,i)=>({d:startOfDay(daysAgo(6-i)), total:0}));
+      tx.forEach(t=>{
+        if(t.type!=='expense') return;
+        const td = startOfDay(new Date(t.date)).getTime();
+        const bin = b.find(v=>v.d.getTime()===td); if(bin) bin.total += +t.amount;
+      }); return b;
+    }
+    function run30(tx, opening=0){
+      const c = daysAgo(29); let bal = opening;
+      const inRange = tx.filter(t => new Date(t.date) >= c).sort((a,b)=>new Date(a.date)-new Date(b.date));
+      const series=[]; for(let i=0;i<30;i++){
+        const day = startOfDay(daysAgo(29-i));
+        inRange.filter(t=>startOfDay(new Date(t.date)).getTime()===day.getTime())
+               .forEach(t=> bal += (t.type==='income'? +t.amount : -Math.abs(+t.amount)));
+        series.push({d:day, bal:+bal.toFixed(2)});
+      } return series;
+    }
+    function fmt(n){ return '$'+Number(n).toFixed(2); }
 
-  // ---------- PATCH E: Budget Ring updater ----------
-  function updateBudgetRing(pctNow, pctProj, spent, total){
-    const ring = document.getElementById('budgetRing');
-    const pct = Math.round(pctNow||0);
-    ring.style.setProperty('--pct', pct+'%');
-    document.getElementById('budgetPct').textContent = pct+'%';
-    const d = document.getElementById('budgetDetail');
-    d.textContent = total
-      ? `${pct}% of $${Number(total||0).toFixed(0)} • proj ${Math.round(pctProj||0)}%`
-      : 'No total set';
-  }
+    // chart defaults (legible)
+    if(window.Chart){
+      Chart.defaults.color = '#cfd6e4';
+      Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto';
+      Chart.defaults.scale.grid.color = 'rgba(255,255,255,0.06)';
+      Chart.defaults.plugins.legend.labels.boxWidth = 10;
+    }
+    function renderBar(ctx, buckets){
+      return new Chart(ctx,{type:'bar',
+        data:{labels:buckets.map(b=>(b.d.getMonth()+1)+'/'+b.d.getDate()),
+              datasets:[{label:'Spend', data:buckets.map(b=>+b.total.toFixed(2))}]},
+        options:{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}
+      });
+    }
+    function renderLine(ctx, series){
+      return new Chart(ctx,{type:'line',
+        data:{labels:series.map(p=>(p.d.getMonth()+1)+'/'+p.d.getDate()),
+              datasets:[{label:'Balance', data:series.map(p=>p.bal), tension:.35, pointRadius:0}]},
+        options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:false}}}
+      });
+    }
 
-  // ---------- Router (bottom tabs) ----------
-  const routes = ['dashboard','overview','budgets','transactions','settings'];
-  function setActive(tab){
-    document.querySelectorAll('.nav .item').forEach(el => el.classList.toggle('active', el.dataset.route===tab));
-    document.getElementById('viewTitle').textContent = tab.charAt(0).toUpperCase()+tab.slice(1);
-    routes.forEach(r => {
-      const p = document.getElementById('panel-'+r);
-      if(p) p.style.display = (r===tab?'block':'none');
-    });
-  }
-  document.querySelector('.nav')?.addEventListener('click', (e) => {
-    const t = e.target.closest('.item'); if(!t) return;
-    e.preventDefault();
-    const route = t.dataset.route;
-    history.pushState({route}, '', '#'+route);
-    setActive(route);
-  }, {passive:false});
-  window.addEventListener('popstate', e => setActive((e.state&&e.state.route)||'dashboard'));
+    (async function init(){
+      const tx = await loadTransactions();
 
-  // ---------- Data layer (local demo; replace with your persistence) ----------
-  let transactions = [];
-  const saved = localStorage.getItem('transactions');
-  if(saved){ transactions = JSON.parse(saved); }
-  else {
-    // seed once (matches your screenshot vibes)
-    transactions = [
-      {id:'p1', type:'income',  amount:1790.63, description:'Week 2', category:'Paycheck',    date:new Date().toISOString()},
-      {id:'r1', type:'expense', amount:900.00,  description:'September half', category:'Rent', date:new Date().toISOString()},
-      {id:'a1', type:'expense', amount:75.59,   description:'Amazon', category:'Personal', date:new Date().toISOString()},
-      {id:'f1', type:'expense', amount:410.83,  description:'Supermarket & Misc', category:'Food', date:new Date().toISOString()},
-      {id:'c1', type:'expense', amount:315.00,  description:'Car Insurance', category:'Insurance', date:new Date().toISOString()},
-      {id:'n1', type:'expense', amount:36.96,   description:'Netflix', category:'Subscriptions', date:new Date().toISOString()},
-    ];
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-  }
-  let budgetTotal = parseFloat(localStorage.getItem('budgetTotal') || '4400');
+      // KPIs
+      const {income, expenses, net} = calcSummary(tx);
+      document.getElementById('incomeVal').textContent  = fmt(income);
+      document.getElementById('expenseVal').textContent = fmt(expenses);
+      document.getElementById('netVal').textContent     = (net<0?'-':'')+fmt(Math.abs(net));
 
-  // expose addTransaction for FAB (Patch C expects this)
-  window.addTransaction = function addTransaction(tx){
-    transactions.push(tx);
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-    recalcAndRender();
-  };
+      // Budget (simple text only; set your total in localStorage.budgetTotal)
+      const total = parseFloat(localStorage.getItem('budgetTotal')||'0');
+      const pct = total ? Math.min(100, (expenses/total)*100) : 0;
+      document.getElementById('budgetUsedPct').textContent = Math.round(pct)+'%';
+      document.getElementById('budgetUsedDetail').textContent = total ? `of $${total.toFixed(0)}` : 'No total set';
 
-  // Quick Add (Patch C, minimalist)
-  (function setupQuickAdd(){
-    const btn = document.getElementById('quickAdd'); if(!btn) return;
-    btn.addEventListener('click', () => {
-      const amt = prompt('Amount (use "-" for expense, "+" or no sign for income):');
-      if(amt===null || amt.trim()==='') return;
-      const v = parseFloat(amt);
-      if(Number.isNaN(v)) return alert('Enter a number like -12.34 or 100');
-      const isExpense = v < 0;
-      const tx = {
-        id: 'tx_'+Date.now(),
-        type: isExpense ? 'expense' : 'income',
-        amount: Math.abs(v),
-        description: isExpense ? 'Quick expense' : 'Quick income',
-        category: isExpense ? 'Personal' : 'Paycheck',
-        date: new Date().toISOString()
+      // Charts
+      const d7 = daily7(tx);
+      document.getElementById('dailyTotalPill').textContent = fmt(d7.reduce((a,c)=>a+c.total,0))+' last 7d';
+      renderBar(document.getElementById('daily7d'), d7);
+      const s30 = run30(tx, 0);
+      document.getElementById('runBalancePill').textContent = 'Opening $0';
+      renderLine(document.getElementById('run30'), s30);
+
+      // Recent tx
+      const list = document.getElementById('txList');
+      const fmtDate = d => new Date(d).toLocaleString([], {month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+      const recent = [...tx].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
+      document.getElementById('txCount').textContent = `${recent.length} items`;
+      list.innerHTML = recent.map(t=>`
+        <div class="tx">
+          <div>
+            <div style="font-weight:600;">${t.description||'—'}</div>
+            <div class="meta">${fmtDate(t.date)} • ${t.category||''}</div>
+          </div>
+          <div class="${t.type==='expense'?'neg':'pos'}">${t.type==='expense'?'-':''}${fmt(t.amount)}</div>
+        </div>`).join('');
+    })();
+
+    // mark active tab by hash (no heavy router)
+    (function markActive(){
+      const set = () => {
+        const hash = (location.hash||'#dashboard');
+        document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('active', a.getAttribute('href')===hash));
+        document.getElementById('viewTitle').textContent = (hash.slice(1).charAt(0).toUpperCase()+hash.slice(2));
       };
-      window.addTransaction(tx);
-      alert('Saved.');
-    }, { passive:true });
-  })();
-
-  // Settings save
-  document.getElementById('saveBudget')?.addEventListener('click', () => {
-    const v = parseFloat(document.getElementById('budgetInput').value || '0');
-    if(v >= 0){
-      budgetTotal = v;
-      localStorage.setItem('budgetTotal', String(v));
-      recalcAndRender();
-    }
-  });
-
-  // ---------- Render glue ----------
-  let dailyChart, runChart;
-  function fmt(n){ return '$'+Number(n).toFixed(2); }
-
-  function renderTxLists(listEl, allEl){
-    const fmtDate = d => new Date(d).toLocaleString([], {month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
-    const row = (t) => `
-      <div class="tx">
-        <div class="left">
-          <div class="desc">${t.description}</div>
-          <div class="meta">${fmtDate(t.date)} • ${t.category}</div>
-        </div>
-        <div class="${t.type==='expense'?'neg':'pos'}">${t.type==='expense'?'-':''}${fmt(t.amount)}</div>
-      </div>`;
-    const recent = [...transactions].sort((a,b)=> new Date(b.date)-new Date(a.date)).slice(0,6);
-    listEl.innerHTML = recent.map(row).join('');
-    allEl.innerHTML  = [...transactions].sort((a,b)=> new Date(b.date)-new Date(a.date)).map(row).join('');
-    document.getElementById('txCount').textContent = `${recent.length} items`;
-  }
-
-  function recalcAndRender(){
-    // KPIs
-    const {income, expenses, net, inMonth} = calcSummary(transactions);
-    document.getElementById('incomeVal').textContent  = fmt(income);
-    document.getElementById('expenseVal').textContent = fmt(expenses);
-    document.getElementById('netVal').textContent     = (net<0?'-':'') + fmt(Math.abs(net));
-
-    // Budget ring + projections
-    const { pctNow, pctProj, projectedSpend } = projectBudgetUsedPercent(budgetTotal, expenses);
-    updateBudgetRing(pctNow, pctProj, expenses, budgetTotal);
-    document.getElementById('budgetInput').value = String(budgetTotal);
-
-    // Daily 7d
-    const daily = dailyExpenses7d(transactions);
-    document.getElementById('dailyTotalPill').textContent = fmt(daily.reduce((a,c)=>a+c.total,0))+' last 7d';
-    if(dailyChart) dailyChart.destroy();
-    dailyChart = renderDaily7d(document.getElementById('daily7d'), daily);
-
-    // Running 30d
-    const opening = 0; // hook to your real opening balance if you have it
-    const series = runningBalance30d(transactions, opening);
-    document.getElementById('runBalancePill').textContent = `Opening ${fmt(opening)}`;
-    if(runChart) runChart.destroy();
-    runChart = renderRunning30(document.getElementById('run30'), series);
-
-    // Transactions lists
-    renderTxLists(document.getElementById('txList'), document.getElementById('txAll'));
-  }
-
-  // init route + render
-  if(!location.hash) history.replaceState({route:'dashboard'}, '', '#dashboard');
-  setActive(location.hash.replace('#','')||'dashboard');
-  document.getElementById('budgetInput').value = String(budgetTotal);
-  recalcAndRender();
+      window.addEventListener('hashchange', set); set();
+    })();
   </script>
-  <script>
-/* ===== PATCH I: limit FAB to sensible tabs & reapply active state ===== */
-(function(){
-  const origSetActive = window.setActive;
-  window.setActive = function(tab){
-    origSetActive(tab);
-    const fab = document.getElementById('quickAdd');
-    if (fab) fab.style.display = (tab === 'dashboard' || tab === 'transactions') ? 'grid' : 'none';
-  };
-  // re-apply to current route after override so the FAB state updates
-  window.setActive((location.hash || '#dashboard').slice(1));
-})();
-</script>
-<script>
-/* Force hide FAB if a router toggles it */
-document.getElementById('quickAdd')?.style.setProperty('display','none','important');
-</script>
 </body>
 </html>
