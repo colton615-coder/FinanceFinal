@@ -446,5 +446,9 @@ html, body { height:auto; }
   window.setActive((location.hash || '#dashboard').slice(1));
 })();
 </script>
+<script>
+/* Force hide FAB if a router toggles it */
+document.getElementById('quickAdd')?.style.setProperty('display','none','important');
+</script>
 </body>
 </html>
