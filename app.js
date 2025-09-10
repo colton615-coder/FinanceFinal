@@ -1224,3 +1224,151 @@ function _monthSlice(transactions) {
     });
   };
 })();
+/* ===== Finance helpers (drop-in) ===== */
+const sum = (arr, f=x=>x) => arr.reduce((a,c)=>a+f(c),0);
+const byType = (tx, type) => tx.filter(t => t.type === type); // "income" | "expense"
+const parseDate = s => new Date(s);
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return startOfDay(d); };
+
+function calcSummary(transactions, month = new Date()){
+  const m = month.getMonth(), y = month.getFullYear();
+  const inMonth = transactions.filter(t => {
+    const d = parseDate(t.date);
+    return d.getMonth()===m && d.getFullYear()===y;
+  });
+  const income = sum(byType(inMonth, "income"), t=>+t.amount);
+  const expenses = sum(byType(inMonth, "expense"), t=>+t.amount);
+  const net = +(income - expenses).toFixed(2);
+  return { income, expenses, net, count: inMonth.length };
+}
+
+function dailyExpenses7d(transactions){
+  const buckets = Array.from({length:7}, (_,i)=>({ d: startOfDay(daysAgo(6-i)), total:0 }));
+  transactions.forEach(t=>{
+    if(t.type!=="expense") return;
+    const td = startOfDay(parseDate(t.date)).getTime();
+    buckets.forEach(b=>{ if(b.d.getTime()===td) b.total += +t.amount; });
+  });
+  return buckets; // [{d, total}]
+}
+
+function runningBalance30d(transactions, opening=0){
+  const cutoff = daysAgo(29);
+  const inRange = transactions
+    .filter(t => parseDate(t.date) >= cutoff)
+    .sort((a,b)=> new Date(a.date)-new Date(b.date));
+  let bal = opening;
+  const series = [];
+  for (let d=0; d<30; d++){
+    const day = startOfDay(daysAgo(29-d));
+    inRange
+      .filter(t => startOfDay(parseDate(t.date)).getTime()===day.getTime())
+      .forEach(t => bal += (t.type==="income"? +t.amount : -Math.abs(+t.amount)));
+    series.push({ d: day, bal: +bal.toFixed(2) });
+  }
+  return series;
+}
+
+// simple projection to month-end based on daily avg burn to date
+function projectBudgetUsedPercent(budgetTotal, spentSoFar, today = new Date()){
+  const day = today.getDate();
+  const daysInMo = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  const avg = day>0 ? spentSoFar/day : 0;
+  const projected = avg*daysInMo;
+  const pctNow = budgetTotal ? (spentSoFar/budgetTotal)*100 : 0;
+  const pctProj = budgetTotal ? (projected/budgetTotal)*100 : 0;
+  return { pctNow: Math.min(100,pctNow), pctProj: Math.min(100,pctProj), projectedSpend: projected };
+}
+
+/* ===== Quick Add modal (super light) ===== */
+(() => {
+  const btn = document.getElementById('quickAdd');
+  if(!btn) return;
+  btn.addEventListener('click', () => {
+    const amt = prompt('Amount (use "-" for expense, "+" or no sign for income):');
+    if(!amt) return;
+    const v = parseFloat(amt);
+    const isExpense = v < 0;
+    const tx = {
+      id: 'tx_'+Date.now(),
+      type: isExpense ? 'expense' : 'income',
+      amount: Math.abs(v),
+      description: isExpense ? 'Quick expense' : 'Quick income',
+      category: isExpense ? 'Personal' : 'Paycheck',
+      date: new Date().toISOString()
+    };
+    // replace with your persistence function:
+    window.addTransaction ? window.addTransaction(tx) : console.warn('addTransaction(tx) missing');
+  }, { passive:true });
+})();
+/* ===== Chart.js defaults (drop-in once) ===== */
+if(window.Chart){
+  Chart.defaults.color = '#cfd6e4';
+  Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto';
+  Chart.defaults.scale.grid.color = 'rgba(255,255,255,0.06)';
+  Chart.defaults.plugins.legend.labels.boxWidth = 10;
+}
+
+/* ===== Renderers (call with your data) ===== */
+function renderDaily7d(ctx, buckets){
+  const labels = buckets.map(b => (b.d.getMonth()+1)+'/'+b.d.getDate());
+  const data = buckets.map(b => +b.total.toFixed(2));
+  return new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Spend', data, borderWidth:1 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true }}
+    }
+  });
+}
+
+function renderRunning30(ctx, series){
+  const labels = series.map(p => (p.d.getMonth()+1)+'/'+p.d.getDate());
+  const data = series.map(p => p.bal);
+  return new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{ label:'Balance', data, tension:.35, pointRadius:0 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:false } }
+    }
+  });
+}
+/* ===== Simple SPA router for bottom tabs ===== */
+const routes = ['dashboard','overview','budgets','transactions','settings'];
+function setActive(tab){
+  document.querySelectorAll('.nav .item').forEach(el => el.classList.toggle('active', el.dataset.route===tab));
+  document.getElementById('viewTitle').textContent = tab.charAt(0).toUpperCase()+tab.slice(1);
+  // swap visible panels (assumes #panel-dashboard etc.)
+  routes.forEach(r => {
+    const p = document.getElementById('panel-'+r);
+    if(p) p.style.display = (r===tab?'block':'none');
+  });
+}
+document.querySelector('.nav')?.addEventListener('click', (e) => {
+  const t = e.target.closest('.item'); if(!t) return;
+  e.preventDefault();
+  const route = t.dataset.route;
+  history.pushState({route}, '', '#'+route);
+  setActive(route);
+}, {passive:false});
+window.addEventListener('popstate', e => setActive((e.state&&e.state.route)||'dashboard'));
+if(!location.hash) history.replaceState({route:'dashboard'}, '', '#dashboard');
+setActive(location.hash.replace('#','')||'dashboard');
+// after loading transactions[] and budgetTotal
+const {income, expenses, net} = calcSummary(transactions);
+document.querySelector('#incomeVal')?.replaceChildren(`$${income.toFixed(2)}`);
+document.querySelector('#expenseVal')?.replaceChildren(`$${expenses.toFixed(2)}`);
+document.querySelector('#netVal')?.replaceChildren(`${net<0?'-':''}$${Math.abs(net).toFixed(2)}`);
+
+const daily = dailyExpenses7d(transactions);
+renderDaily7d(document.getElementById('daily7d'), daily);
+
+const series = runningBalance30d(transactions, /* opening balance */ 0);
+renderRunning30(document.getElementById('run30'), series);
+
+const spent = expenses; // this month
+const { pctNow, pctProj, projectedSpend } = projectBudgetUsedPercent(budgetTotal, spent);
+updateBudgetRing(pctNow, pctProj, spent, budgetTotal);
