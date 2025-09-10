@@ -217,5 +217,121 @@
       window.addEventListener('hashchange', set); set();
     })();
   </script>
+<script>
+/* ===== PATCH R: real tabs (auto panels + router) ===== */
+(function () {
+  const TABS = ['dashboard','overview','budgets','transactions','settings'];
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const content = $('.content');
+  if (!content) return;
+
+  // If no panels exist yet, auto-wrap current content as Dashboard and add the rest.
+  if (!$('#panel-dashboard')) {
+    const dash = document.createElement('section');
+    dash.id = 'panel-dashboard';
+    while (content.firstChild) dash.appendChild(content.firstChild);
+    content.appendChild(dash);
+
+    // Overview (simple note — keep calm)
+    const ov = document.createElement('section');
+    ov.id = 'panel-overview'; ov.style.display = 'none';
+    ov.innerHTML = `
+      <div class="card"><div class="section-title">Overview</div>
+      <div class="muted">High-level snapshot. (Same KPIs as Dashboard.)</div></div>`;
+    content.appendChild(ov);
+
+    // Budgets (inline total input)
+    const bu = document.createElement('section');
+    bu.id = 'panel-budgets'; bu.style.display = 'none';
+    bu.innerHTML = `
+      <div class="card"><div class="section-title">Budgets</div>
+        <div class="muted">Set your monthly budget total.</div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <input id="budgetInput" type="number" min="0" step="1" inputmode="numeric"
+                 style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0f1116;color:#e9edf4;">
+          <button id="saveBudget" style="padding:10px 14px;border-radius:10px;border:0;background:#4c6fff;color:white;">Save</button>
+        </div>
+      </div>`;
+    content.appendChild(bu);
+
+    // Transactions (full list)
+    const tr = document.createElement('section');
+    tr.id = 'panel-transactions'; tr.style.display = 'none';
+    tr.innerHTML = `<div class="card"><div class="section-title">All Transactions</div><div id="txAll"></div></div>`;
+    content.appendChild(tr);
+
+    // Settings (light placeholder)
+    const st = document.createElement('section');
+    st.id = 'panel-settings'; st.style.display = 'none';
+    st.innerHTML = `<div class="card"><div class="section-title">Settings</div><div class="muted">More options coming.</div></div>`;
+    content.appendChild(st);
+  }
+
+  // Minimal router
+  function setActive(tab) {
+    // nav highlight
+    $$('.nav a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#'+tab));
+    // title
+    const title = $('#viewTitle'); if (title) title.textContent = tab.charAt(0).toUpperCase() + tab.slice(1);
+    // panels
+    TABS.forEach(t => {
+      const p = $('#panel-'+t);
+      if (p) p.style.display = (t === tab ? 'block' : 'none');
+    });
+    // scroll to top of content, not behind the nav
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    // populate transactions list if that panel is visible
+    if (tab === 'transactions') renderTxAll();
+    // preset budget input if present
+    if (tab === 'budgets') {
+      const inp = $('#budgetInput');
+      if (inp) inp.value = String(parseFloat(localStorage.getItem('budgetTotal') || '0') || 0);
+    }
+  }
+
+  // Hook bottom nav clicks
+  $('.nav')?.addEventListener('click', (e) => {
+    const t = e.target.closest('a[href^="#"]'); if (!t) return;
+    e.preventDefault();
+    const tab = t.getAttribute('href').slice(1);
+    history.pushState({tab}, '', '#'+tab);
+    setActive(tab);
+  }, { passive: false });
+
+  // Back/forward support
+  window.addEventListener('popstate', () => setActive((location.hash || '#dashboard').slice(1)));
+
+  // Render all transactions (simple)
+  function renderTxAll() {
+    const host = $('#txAll'); if (!host) return;
+    const saved = localStorage.getItem('transactions');
+    const tx = saved ? JSON.parse(saved) : [];
+    const fmt = n => '$'+Number(n).toFixed(2);
+    const fmtDate = d => new Date(d).toLocaleString([], {month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    host.innerHTML = tx.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t => `
+      <div class="tx">
+        <div>
+          <div style="font-weight:600;">${t.description || '—'}</div>
+          <div class="meta">${fmtDate(t.date)} • ${t.category || ''}</div>
+        </div>
+        <div class="${t.type==='expense'?'neg':'pos'}">${t.type==='expense'?'-':''}${fmt(t.amount)}</div>
+      </div>`).join('');
+  }
+
+  // Budget save
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('#saveBudget')) return;
+    const v = parseFloat($('#budgetInput').value || '0');
+    localStorage.setItem('budgetTotal', String(Math.max(0, v || 0)));
+    alert('Budget saved');
+  });
+
+  // Boot
+  const bootTab = (location.hash || '#dashboard').slice(1);
+  if (!location.hash) history.replaceState({tab: 'dashboard'}, '', '#dashboard');
+  setActive(bootTab);
+})();
+</script>
 </body>
 </html>
